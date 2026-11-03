@@ -1,0 +1,350 @@
+@import "tailwindcss";
+@import "react-grid-layout/css/styles.css";
+@import "react-resizable/css/styles.css";
+
+/*
+  Theme tokens. Runtime values (--mc-*) are set on <html> from the user's
+  preferences (see src/lib/preferences.ts). The defaults below are Warm Studio,
+  so the first paint matches the default theme.
+*/
+:root {
+  --mc-background: #f7f2ea;
+  --mc-surface: #fffcf7;
+  --mc-surface-muted: #f1e9de;
+  --mc-text: #30261f;
+  --mc-text-muted: #66574b;
+  --mc-primary: #8f432f;
+  --mc-on-primary: #ffffff;
+  --mc-primary-soft: #f1ded3;
+  --mc-secondary: #586b50;
+  --mc-border: #d9cec1;
+  --mc-border-strong: #857261;
+  --mc-focus: #1f4e8c;
+  --mc-danger: #9e2f25;
+  --mc-cube-a: #c8714f;
+  --mc-cube-b: #8fa383;
+  --mc-cube-c: #e3b66b;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --line-height: 1.6;
+  --letter-spacing: 0em;
+  --density: 1;
+  --space: calc(1rem * var(--density));
+  --radius-card: 14px;
+  --header-height: 4rem;
+}
+
+@theme inline {
+  --color-background: var(--mc-background);
+  --color-surface: var(--mc-surface);
+  --color-surface-muted: var(--mc-surface-muted);
+  --color-text: var(--mc-text);
+  --color-text-muted: var(--mc-text-muted);
+  --color-primary: var(--mc-primary);
+  --color-on-primary: var(--mc-on-primary);
+  --color-primary-soft: var(--mc-primary-soft);
+  --color-secondary: var(--mc-secondary);
+  --color-border: var(--mc-border);
+  --color-border-strong: var(--mc-border-strong);
+  --color-focus: var(--mc-focus);
+  --color-danger: var(--mc-danger);
+  --color-cube-a: var(--mc-cube-a);
+  --color-cube-b: var(--mc-cube-b);
+  --color-cube-c: var(--mc-cube-c);
+  --font-sans: var(--font-body);
+  --radius-card: 14px;
+}
+
+html {
+  background: var(--mc-background);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--mc-background);
+  color: var(--mc-text);
+  font-family: var(--font-body);
+  line-height: var(--line-height);
+  letter-spacing: var(--letter-spacing);
+  overflow-x: hidden;
+}
+
+/* Form controls inherit reading preferences instead of browser defaults. */
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--mc-focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Keep focused elements from hiding under the sticky header and floating controls. */
+html {
+  scroll-padding-top: calc(var(--header-height) + 1rem);
+  scroll-padding-bottom: 6rem;
+}
+
+::selection {
+  background: var(--mc-primary-soft);
+  color: var(--mc-text);
+}
+
+/* Motion: off when the user asks, or when the system asks and the user left it on "system". */
+html[data-motion="on"] *,
+html[data-motion="on"] *::before,
+html[data-motion="on"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="off"]) *,
+  html:not([data-motion="off"]) *::before,
+  html:not([data-motion="off"]) *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer components {
+  .mc-card {
+    background: var(--mc-surface);
+    border: 1px solid var(--mc-border);
+    border-radius: var(--radius-card);
+    box-shadow: 0 1px 2px rgb(48 38 31 / 0.06);
+  }
+
+  .mc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+  .mc-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .mc-btn-primary {
+    background: var(--mc-primary);
+    color: var(--mc-on-primary);
+  }
+  .mc-btn-primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+  .mc-btn-secondary {
+    background: var(--mc-surface);
+    color: var(--mc-text);
+    border-color: var(--mc-border-strong);
+  }
+  .mc-btn-secondary:hover:not(:disabled),
+  .mc-btn-ghost:hover:not(:disabled) {
+    background: var(--mc-surface-muted);
+  }
+  .mc-btn-ghost {
+    background: transparent;
+    color: var(--mc-text);
+  }
+  .mc-btn-danger {
+    background: var(--mc-surface);
+    color: var(--mc-danger);
+    border-color: var(--mc-danger);
+  }
+  .mc-btn-sm {
+    min-height: 2.25rem;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .mc-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    flex-shrink: 0;
+    border-radius: 10px;
+    color: var(--mc-text);
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+  }
+  .mc-icon-btn:hover:not(:disabled) {
+    background: var(--mc-surface-muted);
+  }
+  .mc-icon-btn-sm {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .mc-input {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 10px;
+    border: 1px solid var(--mc-border-strong);
+    background: var(--mc-surface);
+    color: var(--mc-text);
+  }
+  .mc-input::placeholder {
+    color: var(--mc-text-muted);
+    opacity: 1;
+  }
+  .mc-input[aria-invalid="true"] {
+    border-color: var(--mc-danger);
+    border-width: 2px;
+  }
+
+  .mc-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+  .mc-hint {
+    color: var(--mc-text-muted);
+    font-size: 0.875rem;
+  }
+  .mc-error {
+    color: var(--mc-danger);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .mc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--mc-border-strong);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+
+  .mc-tooltip {
+    z-index: 80;
+    max-width: 16rem;
+    padding: 0.375rem 0.625rem;
+    border-radius: 8px;
+    background: var(--mc-text);
+    color: var(--mc-background);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .mc-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: rgb(20 16 12 / 0.45);
+  }
+
+  .mc-dialog {
+    position: fixed;
+    z-index: 61;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(36rem, calc(100vw - 2rem));
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    padding: 1.5rem;
+    background: var(--mc-surface);
+    color: var(--mc-text);
+    border-radius: 16px;
+    border: 1px solid var(--mc-border);
+    box-shadow: 0 12px 40px rgb(20 16 12 / 0.18);
+  }
+  .mc-dialog-wide {
+    width: min(56rem, calc(100vw - 2rem));
+  }
+
+  .mc-menu {
+    z-index: 70;
+    min-width: 14rem;
+    padding: 0.375rem;
+    background: var(--mc-surface);
+    border: 1px solid var(--mc-border);
+    border-radius: 12px;
+    box-shadow: 0 8px 28px rgb(20 16 12 / 0.16);
+  }
+  .mc-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-height: 2.5rem;
+    padding: 0.375rem 0.625rem;
+    border-radius: 8px;
+    cursor: pointer;
+    outline: none;
+  }
+  .mc-menu-item[data-highlighted] {
+    background: var(--mc-surface-muted);
+    outline: 2px solid var(--mc-focus);
+    outline-offset: -2px;
+  }
+  .mc-menu-item[data-disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Subtle snap grid shown only in Creative Mode. */
+  .mc-grid-guides {
+    background-image:
+      linear-gradient(to right, color-mix(in srgb, var(--mc-border) 70%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in srgb, var(--mc-border) 70%, transparent) 1px, transparent 1px);
+    background-size: var(--grid-col-width, 80px) var(--grid-row-height, 58px);
+    border-radius: var(--radius-card);
+  }
+}
+
+/* React Grid Layout: themed placeholder and resize handle. */
+.react-grid-item.react-grid-placeholder {
+  background: var(--mc-primary-soft) !important;
+  border: 2px dashed var(--mc-primary);
+  border-radius: var(--radius-card);
+  opacity: 1 !important;
+}
+.react-grid-item > .react-resizable-handle {
+  width: 22px;
+  height: 22px;
+  z-index: 3;
+}
+.react-grid-item > .react-resizable-handle::after {
+  border-color: var(--mc-text-muted) !important;
+  width: 9px !important;
+  height: 9px !important;
+  border-width: 0 3px 3px 0 !important;
+}
+.react-grid-item.react-draggable-dragging {
+  z-index: 20;
+  box-shadow: 0 12px 30px rgb(20 16 12 / 0.2);
+  border-radius: var(--radius-card);
+}
+
+.sr-only-focusable:not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

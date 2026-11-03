@@ -1,0 +1,126 @@
+"use client";
+
+import { DropdownMenu, Popover } from "radix-ui";
+import { Bell, Blocks, CalendarCheck, Focus, LogOut, Palette, Shield, SlidersHorizontal, User, UserCog } from "lucide-react";
+import { BrandMark } from "../brand/brand-mark";
+import { useWorkspaceData } from "../providers/workspace-data";
+import { useWorkspaceUI, type SettingsSection } from "../providers/workspace-ui";
+
+const MENU_ITEMS: Array<{ section: SettingsSection; label: string; icon: typeof User }> = [
+  { section: "profile", label: "Profile", icon: User },
+  { section: "appearance", label: "Appearance and reading", icon: Palette },
+  { section: "workspace", label: "Workspace preferences", icon: SlidersHorizontal },
+  { section: "notifications", label: "Notifications", icon: Bell },
+  { section: "ai", label: "AI and privacy", icon: Shield },
+  { section: "account", label: "Account", icon: UserCog },
+];
+
+// Compact header: profile and name on the left, the three modes on the right.
+// No sidebar and no tab bar.
+export function AppHeader() {
+  const { profile, workspace, signOut, mode } = useWorkspaceData();
+  const { openSettings, openPlanning, focusMode, enterFocus, exitFocus, creativeMode, setCreativeMode } = useWorkspaceUI();
+  const initial = (profile?.display_name || "?").trim().charAt(0).toUpperCase();
+
+  return (
+    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur" style={{ height: "var(--header-height)" }}>
+      <div className="mx-auto flex h-full max-w-[1400px] items-center gap-2 px-4">
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-border-strong bg-primary-soft text-lg font-bold"
+            aria-label="Open profile menu"
+            title="Profile and settings"
+          >
+            {initial === "?" ? <User size={20} aria-hidden="true" /> : initial}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className="mc-menu" align="start" sideOffset={6}>
+              <DropdownMenu.Label className="px-2 py-1">
+                <span className="block font-semibold">{profile?.display_name || "Your profile"}</span>
+                {mode === "demo" ? <span className="mc-hint">Local demo (this browser only)</span> : null}
+              </DropdownMenu.Label>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              {MENU_ITEMS.map(({ section, label, icon: Icon }) => (
+                <DropdownMenu.Item key={section} className="mc-menu-item" onSelect={() => openSettings(section)}>
+                  <Icon size={16} aria-hidden="true" /> {label}
+                </DropdownMenu.Item>
+              ))}
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DropdownMenu.Item className="mc-menu-item" onSelect={() => signOut()}>
+                <LogOut size={16} aria-hidden="true" /> {mode === "demo" ? "Leave demo" : "Sign out"}
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="hidden items-center gap-1.5 text-sm font-bold sm:inline-flex">
+            <BrandMark size={20} /> Mindcraft
+          </span>
+          <span className="hidden text-text-muted sm:inline" aria-hidden="true">
+            /
+          </span>
+          <h1 className="truncate font-semibold">{workspace?.name ?? "My workspace"}</h1>
+          <StreakIndicator />
+        </div>
+
+        <nav aria-label="Modes" className="ml-auto flex items-center gap-1">
+          <HeaderButton label="Plan my day" icon={<CalendarCheck size={18} aria-hidden="true" />} onClick={() => openPlanning()} />
+          <HeaderButton
+            label={focusMode ? "Exit Focus" : "Focus Mode"}
+            icon={<Focus size={18} aria-hidden="true" />}
+            pressed={focusMode}
+            onClick={() => (focusMode ? exitFocus() : enterFocus())}
+          />
+          <HeaderButton
+            label="Creative Mode"
+            icon={<Blocks size={18} aria-hidden="true" />}
+            pressed={creativeMode}
+            onClick={() => setCreativeMode(!creativeMode)}
+          />
+        </nav>
+      </div>
+    </header>
+  );
+}
+
+function HeaderButton({ label, icon, onClick, pressed }: { label: string; icon: React.ReactNode; onClick: () => void; pressed?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={pressed}
+      title={label}
+      className={`mc-btn mc-btn-sm min-h-11 px-2.5 md:px-3 ${pressed ? "mc-btn-primary" : "mc-btn-ghost"}`}
+    >
+      {icon}
+      {/* Visible label from tablet up; on phones the button keeps its accessible name and tooltip. */}
+      <span className="max-md:sr-only">{label}</span>
+    </button>
+  );
+}
+
+function StreakIndicator() {
+  const { streak, preferences, updatePreferences } = useWorkspaceData();
+  if (!preferences.showStreak || !streak || streak.current_streak < 1) return null;
+  return (
+    <Popover.Root>
+      <Popover.Trigger className="mc-chip ml-1 shrink-0 cursor-pointer bg-surface" aria-label={`Visit streak: ${streak.current_streak} ${streak.current_streak === 1 ? "day" : "days"}. Show details`}>
+        <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-[3px] bg-cube-c" />
+        <span className="max-sm:sr-only">{streak.current_streak} day{streak.current_streak === 1 ? "" : "s"}</span>
+        <span className="sm:hidden">{streak.current_streak}</span>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content className="mc-menu max-w-xs p-3" sideOffset={6}>
+          <p className="font-semibold">Visit streak: {streak.current_streak}</p>
+          <p className="mc-hint mt-1">
+            Days in a row you opened your workspace. Best: {streak.best_streak}. It counts visits only, not how much you did.
+          </p>
+          <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={() => updatePreferences({ showStreak: false })}>
+            Hide streak
+          </button>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}

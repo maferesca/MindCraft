@@ -1,0 +1,213 @@
+# Mindcraft
+
+Mindcraft is a personal workspace you build yourself. It gives you tasks, a calendar, notes, a timer, and practical help starting work. You choose which tools appear, how they look, and how you use them.
+
+The name joins "mind" and "craft". Creative Mode borrows the open-ended building feel of sandbox games, including a bottom inventory. All visuals, icons, and assets are original.
+
+This project was built for a two-week hackathon with Specialisterne. Mindcraft is not clinically validated. We do not claim it suits all neurodivergent people or that it improves productivity. Those are open questions to test with users.
+
+---
+
+## Quick start
+
+Requirements: Node.js 20.9 or newer (developed on Node 24) and npm.
+
+```bash
+npm install
+```
+
+```bash
+cp .env.example .env.local
+```
+
+```bash
+npm run dev
+```
+
+Then open http://localhost:3000.
+
+**No accounts needed to try it.** Without Supabase settings, the sign-in page offers a **local demo**. The demo keeps fictional data in your browser only. AI features stay off in the demo unless you set `ALLOW_DEMO_AI=true` and a `GEMINI_API_KEY` (use this for local testing only).
+
+### Connecting Supabase (real accounts)
+
+1. Create a project at https://supabase.com.
+2. Apply the migration. Either:
+   - paste `supabase/migrations/20261102000000_initial_schema.sql` into the SQL editor and run it, or
+   - use the Supabase CLI: `supabase link` then `supabase db push`.
+3. In **Authentication > URL Configuration**:
+   - set **Site URL** to your app URL (for example `http://localhost:3000`)
+   - add `http://localhost:3000/auth/callback` (and your production equivalent) to **Redirect URLs**.
+4. Copy the project URL and the publishable (anon) key into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+5. Optional: add `GEMINI_API_KEY` and `GEMINI_MODEL` to turn on the assistant.
+
+Email confirmation follows your Supabase Auth settings. If confirmation is on, sign-up shows "Check your email". If it is off, new users go straight to setup.
+
+### Scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Development server |
+| `npm run build` / `npm start` | Production build and server |
+| `npm run typecheck` | Generates route types, then runs TypeScript |
+| `npm run lint` | ESLint (Next.js core-web-vitals and TypeScript rules) |
+| `npm run test:unit` | Vitest unit tests (streaks, quiet hours, layout order, AI proposal guard) |
+| `npm run test:rls` | Runs the migration in in-memory Postgres (PGlite) and checks that two accounts cannot see or change each other's data |
+| `npm run check:contrast` | Measures WCAG contrast for every theme and accent combination |
+| `npm run verify` | Runs all of the checks above |
+
+---
+
+## Architecture
+
+```
+Browser (Next.js client components)
+  ├─ Workspace UI: header, blocks, Creative Mode, Focus Mode, dialogs
+  ├─ WorkspaceDataProvider: one in-memory store of the user's records
+  │     └─ Repository ── Supabase (Postgres + RLS)   ← signed-in users
+  │                   └─ localStorage               ← local demo only
+  └─ fetch ──► Next.js route handlers (server)
+                 ├─ /api/assistant   → Gemini (structured JSON) → Zod validation
+                 ├─ /api/transcribe  → Gemini (audio → text), nothing stored
+                 └─ /auth/callback   → Supabase email link exchange
+src/proxy.ts: refreshes the session cookie and redirects signed-out visitors
+```
+
+### Key decisions
+
+- **One app, one repository.** Next.js 16 App Router with TypeScript. There is no separate API service.
+- **Data goes straight to Supabase, protected by Row Level Security.** CRUD calls run in the browser with the user's own session. Every table has owner-only RLS policies. Triggers stop one account from linking to another account's records (for example a step on someone else's task). Check constraints enforce text lengths and allowed values (status, block types, and so on). `npm run test:rls` verifies this.
+- **Privileged work stays on the server.** Gemini calls happen only in route handlers. Each handler checks the caller's session with `getClaims()`, rate-limits the request, and validates input with Zod. The Gemini key is never sent to the browser, and the Supabase service-role key is never used.
+- **Blocks are views and records are shared.** `workspace_blocks` stores only presentation: block type, display options, grid positions per breakpoint, phone order, and hidden state. Tasks, steps, notes, and events live in their own tables. Every block reads from the same in-memory store, so a change in one block shows up everywhere straight away. Removing a block never deletes content.
+- **Creative Mode edits a draft.** Entering Creative Mode snapshots the block list. Undo and Redo work on a history of drafts. **Save** writes only the difference. **Cancel** discards the draft. Task edits made during the session are not part of the draft, so they survive Cancel.
+- **Layouts per breakpoint.** Desktop uses a 12-column grid, tablet uses 6 columns, and phones use a single column. If a breakpoint has no saved layout, Mindcraft builds one from the desktop reading order (top to bottom, then left to right). Reordering on a phone saves `mobile_order` and never changes desktop positions.
+- **AI proposals are never actions.** The model returns `{ reply, question?, proposals[] }`. The server checks each proposal against a strict Zod union of the six allowed types and drops unknown task ids. It also removes deadlines and priorities unless the user's own words mention them. The browser validates the result again, and validates once more before Apply. Mindcraft never runs model-generated code, queries, or arbitrary mutations.
+- **One assistant.** The chat panel, Plan my day, Help me start, and Missing information all use the same endpoint, rules, and saved conversation. Each request sends only the context it needs (see "What is sent to the AI").
+- **Model configuration lives in one place.** `src/lib/ai/server-env.ts` reads `GEMINI_MODEL`, with a default of `gemini-3.8-flash`. Check current model IDs at https://ai.google.dev/gemini-api/docs/models.
+
+### Folder guide
+
+| Path | Contents |
+| --- | --- |
+| `supabase/migrations/` | Schema, RLS policies, triggers, streak function |
+| `src/app/` | Routes: auth pages, `/welcome` (setup), `/workspace`, API route handlers, manifest, icons |
+| `src/components/blocks/` | Task list, Calendar, Next step, Timer, Notes |
+| `src/components/workspace/` | Grid, block frame, Creative Mode, inventory, empty state, search |
+| `src/components/assistant/`, `planning/` | Assistant panel, proposals, voice recorder, Plan my day, daily welcome card |
+| `src/components/providers/` | Data store, screen state, shared timer |
+| `src/lib/` | Types, Zod schemas, themes, preferences, layout logic, dates, AI helpers, repositories |
+| `scripts/` | RLS test and contrast checker |
+
+### What is sent to the AI
+
+The assistant receives only these items:
+
+- the user's message and the last few chat messages
+- the selected task (title, description, expected result, deadline, priority, status, steps)
+- titles, status, and deadlines of other open tasks
+- the block types in the workspace
+- three preferences: response detail, language, and planning style
+- choices the user has stated, such as "no timer"
+
+Notes, calendar events, email, and other settings are never sent. A voice recording is sent once for transcription and is not stored. The same explanation appears in **Settings > AI and privacy**.
+
+---
+
+## Capability status
+
+### Implemented
+
+- Sign up, sign in, email confirmation (when enabled in Supabase), password recovery, and sign out, with loading, validation, and error states. Supabase Auth handles all passwords.
+- Short, skippable setup with a live preview: name, theme and accent, font, text size, line spacing, density, motion, preferred tools, and reminders. Includes **Use defaults** and **Set this up later**.
+- New accounts start with an empty workspace showing "Your space, your way." and the actions Build my space, Help me choose, and Plan my day. A starter layout appears only as a preview and is added only after confirmation.
+- Compact header with profile menu (Profile, Appearance and reading, Workspace preferences, Notifications, AI and privacy, Account, Sign out), workspace name, an optional streak, and three modes. There is no sidebar.
+- **Creative Mode:** bottom inventory (one row on desktop with overflow arrows, a bottom sheet on phones), drag from the inventory or press to add, header-only drag handles, resizing with minimum sizes, snap grid, Save, Cancel, Undo, Redo (also Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y), hide or remove with an explanation, and non-drag controls (Move earlier or later, size presets, move left, right, up, or down).
+- **Blocks:**
+  - **Task List:** quick add, full editor, status, filters, compact or expanded view, delete with Undo, Help me start, and Missing information with an editable draft message to copy.
+  - **Calendar:** day, week, and month views. Internal events and work sessions, deadlines shown separately from scheduled sessions, events linkable to tasks. It is labelled as the Mindcraft calendar.
+  - **Next step:** one action at a time; edit, replace, complete, Make this smaller, or I'm blocked. Works without AI. Completing a step never completes the task.
+  - **Timer:** Pomodoro preset or custom length. Start, pause, resume, reset, and end, with an optional break. Sound is off by default, and motion respects your settings.
+  - **Notes:** quick capture, optional title, autosave, task links, and delete with Undo.
+- Focus Mode: selected task, expected result, current step, resources (source link and linked notes), an optional timer, Help me start, and I'm blocked. Leaving it restores the saved workspace untouched.
+- Assistant panel (side panel on desktop, full screen on phones) with proposals you can Apply, Edit, or Dismiss. Errors offer Retry, and your text is kept.
+- Daily welcome card (once per local day, dismissible) with text, voice, and four quick choices. Plan my day covers text and voice with an editable transcript.
+- Voice capture: the microphone is requested only after you press Record. The recorder shows recording, stop, cancel, and processing states. Recordings are limited to 2 minutes and 5 MB, and the server checks the file type. Typing always works as an alternative.
+- Six complete themes (Warm Studio, Clear, Rose, Colorful, Monochrome, Dark) and five accents. Each has a light and a dark variant.
+- Reading preferences: font, text size, line spacing, letter spacing, and density. These apply everywhere, including dialogs and chat. Each setting has **Reset**, and there is **Restore appearance defaults**.
+- Optional streak: one visit per local day, using the saved timezone. Current and best streaks are stored and the streak can be hidden. There are no penalties.
+- In-app reminders: Off, Friendly, Playful, or Minimal, with quiet hours, a preferred time, an inactivity threshold, snooze, and turn off.
+- PWA: manifest, generated icons, and a service worker that caches the app shell and serves an offline page. An offline banner appears, and unsent chat and planning text is kept on the device.
+- Settings controls to clear chat history, reset the workspace layout, and reset all preferences.
+
+### Deferred (not built)
+
+- **Browser push notifications.** These need permission, saved subscriptions, and a server-side scheduler. There is no `push_subscriptions` table yet.
+- Offline editing and sync. Edits made while offline are not queued.
+- Using AI to interpret free-form setup answers. The assistant can suggest preference changes in chat, but the setup screen does not use AI.
+- Self-service account deletion. This needs a privileged server function.
+- Daily Schedule, Upcoming, routines with recurrence, and a streak block.
+- Calendar sync with Google or Outlook.
+- A shared rate limiter across server instances. The current limiter is in memory and protects only a single instance.
+
+### Simulated or limited
+
+- **Reminders are in-app only.** They appear while Mindcraft is open, either when you return after the inactivity period or at the preferred time. Nothing is sent while the app is closed.
+- **Local demo mode** stores fictional data in `localStorage`. It is a convenience for exploring the app, not a real account. Its streak logic mirrors the SQL function.
+- The service worker does not make the app usable offline. It shows an offline page and caches static assets.
+
+---
+
+## Validation results
+
+Run on 2026-11-02:
+
+| Check | Result |
+| --- | --- |
+| TypeScript (`tsc --noEmit`) | Passed, 0 errors |
+| ESLint | Passed, 0 problems |
+| Production build (`next build`) | Passed |
+| Unit tests (Vitest) | 13 of 13 passed |
+| RLS isolation (PGlite, two accounts) | 20 of 20 checks passed |
+| Theme contrast (6 themes × 6 accents) | All text pairs ≥ 4.5:1 and all control borders and focus indicators ≥ 3:1 |
+
+**Manual browser walkthrough (local demo, desktop 1366×860 and phone 375×812):** setup with live theme preview; empty workspace; adding blocks by pressing (no dragging); header drag; Undo, Redo, and Cancel restoring positions; Save surviving a reload; marking a step done without completing the task; completing a task updating Task List, Next step, and the calendar deadline; Focus Mode exit leaving the layout unchanged; removing the Task List block keeping all tasks; AI failure keeping the draft and changing no data; phone view in the desktop reading order with no horizontal scrolling; phone reordering through the bottom sheet; API returning 401 when signed out and 403 for the demo without opt-in.
+
+**Not yet verified:**
+
+- Real Gemini responses. No API key was available during development, so we could not confirm that the model follows the response schema. The validation and error paths are tested.
+- Real Supabase email flows. RLS was tested in PGlite with a stand-in for the `auth` schema, not on a hosted Supabase project.
+- Screen-reader testing with NVDA, JAWS, or VoiceOver.
+- Testing with users.
+
+Following WCAG 2.2 AA practices is a goal, not a certification.
+
+### Acceptance checks
+
+| # | Check | How it is covered |
+| --- | --- | --- |
+| 1 | Skip setup and reach an empty workspace | "Set this up later" plus the new-user trigger, which creates no blocks (RLS test) |
+| 2 | Suggested blocks need confirmation | Starter layout is preview-only; proposals need Apply |
+| 3 | Add a block without dragging | Inventory buttons and tap-to-add (walkthrough) |
+| 4 | Layout and preferences persist | Saved to the database or demo storage; reload checked |
+| 5 | Removing Task List keeps tasks | RLS test plus walkthrough |
+| 6 | Task updates reach all views | One shared store (walkthrough) |
+| 7 | Missing deadline stays unspecified | `due_date` is nullable and never guessed; unit test strips invented dates |
+| 8 | Focus Mode restores workspace | Focus Mode never writes layout (walkthrough) |
+| 9 | Declined timer respected | Declines detected and sent as context, plus an assistant rule (unit test) |
+| 10 | Proposals do not alter data before confirmation | AI endpoints never write; Apply is the only path |
+| 11 | Microphone denial leaves text | Recorder error message; the text box is always present |
+| 12 | API failure keeps tasks and drafts | Walkthrough; drafts are kept in localStorage |
+| 13 | Accounts isolated | `npm run test:rls` |
+| 14 | Mobile preserves desktop arrangement | Unit test plus phone walkthrough |
+| 15 | No credentials in browser code | Only `NEXT_PUBLIC_SUPABASE_*` public values reach the client |
+| 16 | Streak uses local calendar days | SQL function uses the profile timezone; unit and RLS tests |
+| 17 | Disabled reminders schedule nothing | Style "Off" returns before any timer is created |
+
+---
+
+## Demonstration data
+
+`src/lib/demo/sample-data.ts` contains fictional tasks, notes, and an event, for example the made-up "Northwind Bakery". This data is loaded only into the local demo and is never written to Supabase.
+
+## AI assistance disclosure
+
+An AI coding assistant (Claude, by Anthropic) generated most of this codebase from the team's written brief. That includes the schema, the components, the tests, and this README. The team should review, test, and adapt the code before relying on it. The AI did not run user research and could not test the app with real Gemini or Supabase credentials. Any claims about benefits for users still need evaluation with users.
