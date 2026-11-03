@@ -40,6 +40,14 @@ export async function generate(params: Omit<GenerateParams, "model"> & { model?:
     if (!text) throw new AiUnavailableError("invalid_output", "The assistant returned an empty answer.");
     return text;
   } catch (error) {
+    console.error("Gemini request diagnostic", {
+      model: params.model ?? config.model,
+      timeoutMs: config.timeoutMs,
+      aborted: controller.signal.aborted,
+      providerStatus: error instanceof ApiError ? error.status : null,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
+
     if (error instanceof AiUnavailableError) throw error;
     if (controller.signal.aborted) throw new AiUnavailableError("timeout", "The assistant took too long to answer.");
     if (error instanceof ApiError) {
