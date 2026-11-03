@@ -28,6 +28,26 @@ export async function createSupabaseRepository(): Promise<Repository | null> {
     },
 
     async insert<T>(table: TableName, row: Row) {
+      if (table === "conversations") {
+        // Every entry point shares one conversation. Another tab may create it
+        // first, so keep the existing row and its message links on conflict.
+        const { data: created, error: createError } = await supabase
+          .from("conversations")
+          .upsert({ ...row, user_id: user.id }, { onConflict: "user_id", ignoreDuplicates: true })
+          .select()
+          .maybeSingle();
+        if (createError) fail("save to conversations", createError);
+        if (created) return created as T;
+
+        const { data: existing, error: readError } = await supabase
+          .from("conversations")
+          .select("*")
+          .eq("user_id", user.id)
+          .single();
+        if (readError) fail("load the existing conversation", readError);
+        return existing as T;
+      }
+
       const { data: inserted, error } = await supabase
         .from(table)
         .insert({ ...row, user_id: user.id })

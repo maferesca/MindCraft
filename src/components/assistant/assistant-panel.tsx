@@ -50,6 +50,17 @@ export function AssistantPanel() {
   const [mode, setMode] = useState<AssistantMode>("chat");
   const [taskId, setTaskId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const sendingRef = useRef(false);
+  // Retain a received answer if saving fails, so retry saves it without making
+  // another AI request or adding the already-saved user message again.
+  const unsavedReplyRef = useRef<{
+    text: string;
+    mode: AssistantMode;
+    taskId: string | null;
+    reply: string;
+    proposal: unknown;
+    userSaved: boolean;
+  } | null>(null);
   const [error, setError] = useState<{ message: string; text: string } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -57,22 +68,53 @@ export function AssistantPanel() {
 
   async function send(text: string, sendMode: AssistantMode = mode, sendTaskId: string | null = taskId) {
     const content = text.trim();
-    if (!content || pending) return;
+    if (!content || sendingRef.current) return;
+    sendingRef.current = true;
     setPending(true);
     setError(null);
-    const history = messages.slice(-10).map((message) => ({ role: message.role, content: message.content }));
-    const result = await askAssistant([...history, { role: "user", content }], buildContext(sendMode, sendTaskId, [content]));
-    setPending(false);
-    if (!result.ok) {
-      // Keep the text so nothing typed is lost; offer retry.
-      setError({ message: result.message, text: content });
-      setInput(content);
-      return;
+    let savingReply = false;
+    try {
+      let exchange = unsavedReplyRef.current;
+      if (!exchange || exchange.text !== content || exchange.mode !== sendMode || exchange.taskId !== sendTaskId) {
+        const history = messages.slice(-10).map((message) => ({ role: message.role, content: message.content }));
+        const result = await askAssistant([...history, { role: "user", content }], buildContext(sendMode, sendTaskId, [content]));
+        if (!result.ok) {
+          setError({ message: result.message, text: content });
+          setInput((current) => current || content);
+          return;
+        }
+        exchange = {
+          text: content,
+          mode: sendMode,
+          taskId: sendTaskId,
+          reply: result.data.question ? `${result.data.reply}\n\n${result.data.question}` : result.data.reply,
+          proposal: result.data.proposals.length ? { proposals: result.data.proposals } : null,
+          userSaved: false,
+        };
+        unsavedReplyRef.current = exchange;
+      }
+      savingReply = true;
+      if (!exchange.userSaved) {
+        const savedUser = await appendMessage("user", content);
+        if (!savedUser) throw new Error("User message was not saved.");
+        exchange.userSaved = true;
+      }
+      const savedReply = await appendMessage("assistant", exchange.reply, exchange.proposal);
+      if (!savedReply) throw new Error("Assistant reply was not saved.");
+      unsavedReplyRef.current = null;
+      setInput((current) => (current.trim() === content ? "" : current));
+    } catch {
+      setInput((current) => current || content);
+      setError({
+        message: savingReply
+          ? "The assistant replied, but the conversation could not be saved. Try again to save it."
+          : "The assistant could not answer. Please try again.",
+        text: content,
+      });
+    } finally {
+      sendingRef.current = false;
+      setPending(false);
     }
-    setInput("");
-    await appendMessage("user", content);
-    const reply = result.data.question ? `${result.data.reply}\n\n${result.data.question}` : result.data.reply;
-    await appendMessage("assistant", reply, result.data.proposals.length ? { proposals: result.data.proposals } : null);
   }
 
   // Requests from other parts of the app (Help me start, Missing information…).
@@ -128,8 +170,13 @@ export function AssistantPanel() {
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 className="mc-menu-item text-danger"
+                disabled={pending}
                 onSelect={() => {
-                  if (window.confirm("Clear the whole chat history? This cannot be undone.")) clearChat();
+                  if (window.confirm("Clear the whole chat history? This cannot be undone.")) {
+                    unsavedReplyRef.current = null;
+                    setError(null);
+                    clearChat();
+                  }
                 }}
               >
                 Clear chat history

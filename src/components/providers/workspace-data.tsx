@@ -127,7 +127,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  // A ref is updated immediately, including between two awaited message saves
+  // in the same send handler before React has rendered again.
+  const conversationIdRef = useRef<string | null>(null);
+  const conversationPromiseRef = useRef<Promise<string> | null>(null);
   const [streak, setStreak] = useState<Streak | null>(null);
   const [previousVisitDate, setPreviousVisitDate] = useState<string | null>(null);
 
@@ -191,7 +194,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         setSteps(stepRows);
         setNotes(noteRows);
         setEvents(eventRows);
-        setConversationId(currentConversation);
+        conversationIdRef.current = currentConversation;
         setMessages(loadedMessages);
         setPreviousVisitDate(previous?.last_visit_date ?? null);
         setStreak(visit);
@@ -594,11 +597,20 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const appendMessage = useCallback(
     async (role: ChatMessage["role"], content: string, proposal?: unknown) => {
       try {
-        let id = conversationId;
+        let id = conversationIdRef.current;
         if (!id) {
-          const conversation = await requireRepo(repoRef).insert<{ id: string }>("conversations", {});
-          id = conversation.id;
-          setConversationId(id);
+          // Concurrent callers share the same creation request. Supabase also
+          // resolves conflicts with conversations created in another tab.
+          conversationPromiseRef.current ??= requireRepo(repoRef)
+            .insert<{ id: string }>("conversations", {})
+            .then((conversation) => {
+              conversationIdRef.current = conversation.id;
+              return conversation.id;
+            })
+            .finally(() => {
+              conversationPromiseRef.current = null;
+            });
+          id = await conversationPromiseRef.current;
         }
         const message = await requireRepo(repoRef).insert<ChatMessage>("messages", {
           conversation_id: id,
@@ -613,18 +625,20 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         return null;
       }
     },
-    [conversationId],
+    [],
   );
 
   const clearChat = useCallback(async () => {
     try {
-      if (conversationId) await requireRepo(repoRef).remove("conversations", conversationId);
-      setConversationId(null);
+      if (conversationPromiseRef.current) await conversationPromiseRef.current;
+      const id = conversationIdRef.current;
+      if (id) await requireRepo(repoRef).remove("conversations", id);
+      conversationIdRef.current = null;
       setMessages([]);
     } catch (error) {
       reportError(error);
     }
-  }, [conversationId, reportError]);
+  }, [reportError]);
 
   // ---------------------------------------------------------------------------
   // Applying a reviewed AI proposal. Re-validated here: the app, not the model,
