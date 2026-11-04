@@ -1,12 +1,13 @@
 "use client";
 
 import { DropdownMenu } from "radix-ui";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronUp, EyeOff, GripVertical, MoreHorizontal, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronUp, EyeOff, GripVertical, Maximize2, Minimize2, Minus, MoreHorizontal, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { BLOCK_DEFINITIONS } from "@/lib/blocks";
 import { SIZE_LABELS, currentSizePreset, type SizePreset } from "@/lib/layout-edit";
 import type { Breakpoint, WorkspaceBlock } from "@/lib/types";
 import { BlockIcon, blockHeaderBackground } from "../blocks/block-icon";
+import { useWorkspaceData } from "../providers/workspace-data";
 import { IconButton } from "../ui/icon-button";
 
 export interface CreativeActions {
@@ -24,12 +25,16 @@ interface BlockFrameProps {
   block: WorkspaceBlock;
   breakpoint: Breakpoint | "sm";
   creative: CreativeActions | null;
+  maximized?: boolean;
+  // Absent in Creative Mode, where every block must stay visible to arrange it.
+  onToggleMaximize?: () => void;
   children: ReactNode;
 }
 
 // Card around every block. In Creative Mode only the header grip starts a
 // drag; text fields, checkboxes, and scrolling inside the block never move it.
-export function BlockFrame({ block, breakpoint, creative, children }: BlockFrameProps) {
+export function BlockFrame({ block, breakpoint, creative, maximized = false, onToggleMaximize, children }: BlockFrameProps) {
+  const { updateBlockConfig } = useWorkspaceData();
   const definition = BLOCK_DEFINITIONS[block.block_type];
   const title = block.title || definition.label;
   const headingId = `block-heading-${block.id}`;
@@ -37,7 +42,7 @@ export function BlockFrame({ block, breakpoint, creative, children }: BlockFrame
   return (
     <section
       aria-labelledby={headingId}
-      className={`mc-card flex h-full min-h-0 flex-col overflow-hidden ${creative ? "outline-2 outline-dashed outline-offset-2 outline-border-strong" : ""}`}
+      className={`mc-card flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden ${creative ? "outline-2 outline-dashed outline-offset-2 outline-border-strong" : ""}`}
     >
       <header
         className={`flex items-center gap-2 border-b border-border px-3 py-1.5 ${creative ? "bg-surface-muted" : ""}`}
@@ -57,10 +62,39 @@ export function BlockFrame({ block, breakpoint, creative, children }: BlockFrame
           {title}
         </h3>
         {creative ? <CreativeControls block={block} breakpoint={breakpoint} actions={creative} title={title} /> : null}
+        <div className="flex items-center gap-0.5">
+          {!maximized ? (
+            <IconButton
+              size="sm"
+              label={`Minimize ${title}`}
+              icon={<Minus size={18} />}
+              data-minimize-block={block.id}
+              onClick={() => {
+                updateBlockConfig(block.id, { minimized: true });
+                focusAfterRender(`[data-restore-block="${block.id}"]`);
+              }}
+            />
+          ) : null}
+          {onToggleMaximize ? (
+            <IconButton
+              size="sm"
+              label={maximized ? `Exit full size for ${title}` : `Maximize ${title}`}
+              icon={maximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+              autoFocus={maximized}
+              data-maximize-block={block.id}
+              onClick={onToggleMaximize}
+            />
+          ) : null}
+        </div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto p-[var(--space)]">{children}</div>
     </section>
   );
+}
+
+// The control that opened this change disappears, so focus moves to its counterpart.
+export function focusAfterRender(selector: string) {
+  window.setTimeout(() => document.querySelector<HTMLElement>(selector)?.focus(), 50);
 }
 
 function CreativeControls({ block, breakpoint, actions, title }: { block: WorkspaceBlock; breakpoint: Breakpoint | "sm"; actions: CreativeActions; title: string }) {

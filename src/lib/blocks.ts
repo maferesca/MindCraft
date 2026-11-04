@@ -58,6 +58,12 @@ export const BLOCK_ORDER: BlockType[] = ["task_list", "calendar", "next_step", "
 export const GRID_COLUMNS: Record<Breakpoint, number> = { lg: 12, md: 6 };
 export const ROW_HEIGHT = 48;
 
+// A minimized block leaves the grid and appears as an icon in the tray. Its saved
+// layout is left alone, so restoring it brings back the same size and place.
+export function isMinimized(block: Pick<WorkspaceBlock, "config">) {
+  return block.config.minimized === true;
+}
+
 // Desktop is "lg", tablet is "md", phones use a one-column list.
 export function breakpointForWidth(width: number): Breakpoint | "sm" {
   if (width >= 1024) return "lg";

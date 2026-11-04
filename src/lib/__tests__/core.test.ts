@@ -5,7 +5,7 @@ import { sanitizeProposals, stripInlineMarkdown } from "../ai/proposal-guard";
 import { detectDeclines } from "../ai/client";
 import { CATALOG_ITEMS } from "../block-catalog";
 import { BLOCK_CAPABILITIES, blockPlacement, capabilityText } from "../block-capabilities";
-import { BLOCK_ORDER, positionsForBreakpoint, sortForPhone } from "../blocks";
+import { BLOCK_ORDER, isMinimized, positionsForBreakpoint, sortForPhone } from "../blocks";
 import { clearSessionData } from "../clear-session-data";
 import { isWithinQuietHours, nextStreak } from "../dates";
 import { moveInOrder } from "../layout-edit";
@@ -275,6 +275,14 @@ describe("task estimates in the task form", () => {
     expect(taskInputSchema.safeParse({ title: "x", estimated_minutes: null }).success).toBe(true);
     for (const value of [0, 601, 1.5]) expect(taskInputSchema.safeParse({ title: "x", estimated_minutes: value }).success).toBe(false);
   });
+});
+
+describe("minimized blocks", () => {
+  it("reads the saved flag from the block config", () => {
+    expect(isMinimized({ config: { minimized: true } })).toBe(true);
+    expect(isMinimized({ config: {} })).toBe(false);
+  });
+
 });
 
 describe("Groq completion reserve", () => {
