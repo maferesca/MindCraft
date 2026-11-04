@@ -1,10 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { cacheAppearance } from "@/lib/appearance-cache";
 import { BLOCK_DEFINITIONS, GRID_COLUMNS, findFreePosition, sizeFor } from "@/lib/blocks";
 import { createLocalRepository } from "@/lib/data/local-repository";
-import type { Repository, Row } from "@/lib/data/repository";
+import type { Repository, Row, TableName } from "@/lib/data/repository";
 import { createSupabaseRepository } from "@/lib/data/supabase-repository";
 import { browserTimezone } from "@/lib/dates";
 import { DEFAULT_PREFERENCES, applyPreferencesToDocument, normalizePreferences, type Preferences } from "@/lib/preferences";
@@ -16,8 +16,12 @@ import type {
   ChatMessage,
   GridPosition,
   Note,
+  CheckIn,
   NotificationPreferences,
   Profile,
+  Project,
+  Resource,
+  ReviewItem,
   Streak,
   Task,
   TaskStep,
@@ -31,8 +35,17 @@ type Status = "loading" | "ready" | "signed_out" | "error";
 export interface DeletedTaskSnapshot {
   task: Task;
   steps: TaskStep[];
+  reviewItems: ReviewItem[];
   linkedNoteIds: string[];
   linkedEventIds: string[];
+  linkedResourceIds: string[];
+  linkedCheckInIds: string[];
+}
+
+interface CollectionActions<T> {
+  create: (input: Partial<T>) => Promise<T | null>;
+  update: (id: string, patch: Partial<T>) => Promise<boolean>;
+  remove: (id: string) => Promise<boolean>;
 }
 
 interface WorkspaceData {
@@ -45,8 +58,13 @@ interface WorkspaceData {
   notificationPreferences: NotificationPreferences | null;
   workspace: Workspace | null;
   blocks: WorkspaceBlock[];
+  draftConfigs: Record<string, Record<string, unknown>>;
   tasks: Task[];
   steps: TaskStep[];
+  reviewItems: ReviewItem[];
+  projects: Project[];
+  resources: Resource[];
+  checkIns: CheckIn[];
   notes: Note[];
   events: CalendarEvent[];
   messages: ChatMessage[];
@@ -65,9 +83,14 @@ interface WorkspaceData {
   addStep: (taskId: string, text: string) => Promise<TaskStep | null>;
   updateStep: (id: string, patch: Partial<TaskStep>) => Promise<void>;
   deleteStep: (id: string) => Promise<void>;
+  reviewActions: CollectionActions<ReviewItem>;
+  resourceActions: CollectionActions<Resource>;
+  checkInActions: CollectionActions<CheckIn>;
+  // Returns the project with this name, creating it when it is new.
+  ensureProject: (name: string) => Promise<Project | null>;
 
   createNote: (input: Partial<Note>) => Promise<Note | null>;
-  updateNote: (id: string, patch: Partial<Note>) => Promise<void>;
+  updateNote: (id: string, patch: Partial<Note>) => Promise<boolean>;
   deleteNote: (id: string) => Promise<Note | null>;
   restoreNote: (note: Note) => Promise<void>;
 
@@ -111,6 +134,55 @@ function newLocalId() {
   return `new-${crypto.randomUUID()}`;
 }
 
+// Create, update, and delete for a simple table held in provider state.
+function useCollectionActions<T extends { id: string }>(
+  table: TableName,
+  setRows: Dispatch<SetStateAction<T[]>>,
+  repoRef: { current: Repository | null },
+  reportError: (error: unknown) => void,
+): CollectionActions<T> {
+  const create = useCallback(
+    async (input: Partial<T>) => {
+      try {
+        const row = await requireRepo(repoRef).insert<T>(table, input as Row);
+        setRows((current) => [...current, row]);
+        return row;
+      } catch (error) {
+        reportError(error);
+        return null;
+      }
+    },
+    [table, setRows, repoRef, reportError],
+  );
+  const update = useCallback(
+    async (id: string, patch: Partial<T>) => {
+      try {
+        const row = await requireRepo(repoRef).update<T>(table, id, patch as Row);
+        setRows((current) => current.map((item) => (item.id === id ? row : item)));
+        return true;
+      } catch (error) {
+        reportError(error);
+        return false;
+      }
+    },
+    [table, setRows, repoRef, reportError],
+  );
+  const remove = useCallback(
+    async (id: string) => {
+      try {
+        await requireRepo(repoRef).remove(table, id);
+        setRows((current) => current.filter((item) => item.id !== id));
+        return true;
+      } catch (error) {
+        reportError(error);
+        return false;
+      }
+    },
+    [table, setRows, repoRef, reportError],
+  );
+  return { create, update, remove };
+}
+
 export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const { notify } = useNotify();
   const repoRef = useRef<Repository | null>(null);
@@ -122,8 +194,14 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [blocks, setBlocks] = useState<WorkspaceBlock[]>([]);
+  // Settings of blocks added in Creative Mode that are not saved yet.
+  const [draftConfigs, setDraftConfigs] = useState<Record<string, Record<string, unknown>>>({});
   const [tasks, setTasks] = useState<Task[]>([]);
   const [steps, setSteps] = useState<TaskStep[]>([]);
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -156,7 +234,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         }
         repoRef.current = repo;
         setSession({ mode: repo.mode, email: repo.email });
-        const [profiles, prefRows, notificationRows, workspaces, blockRows, taskRows, stepRows, noteRows, eventRows, conversations] =
+        const [profiles, prefRows, notificationRows, workspaces, blockRows, taskRows, stepRows, noteRows, eventRows, conversations, reviewRows, projectRows, resourceRows, checkInRows] =
           await Promise.all([
             repo.list<Profile>("profiles"),
             repo.list<{ settings: unknown }>("preferences"),
@@ -168,6 +246,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             repo.list<Note>("notes"),
             repo.list<CalendarEvent>("calendar_events"),
             repo.list<{ id: string }>("conversations"),
+            repo.list<ReviewItem>("task_review_items"),
+            repo.list<Project>("projects"),
+            repo.list<Resource>("resources"),
+            repo.list<CheckIn>("check_ins"),
           ]);
         if (cancelled) return;
 
@@ -190,8 +272,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         setNotificationPreferences(notificationRows[0] ?? null);
         setWorkspace(workspaces[0] ?? null);
         setBlocks(blockRows);
-        setTasks(taskRows);
+        // The demo may still hold tasks saved with the old Blocked status.
+        setTasks(taskRows.map((task) => ((task.status as string) === "blocked" ? { ...task, status: "in_progress" } : task)));
         setSteps(stepRows);
+        setReviewItems(reviewRows);
+        setProjects(projectRows);
+        setResources(resourceRows);
+        setCheckIns(checkInRows);
         setNotes(noteRows);
         setEvents(eventRows);
         conversationIdRef.current = currentConversation;
@@ -273,6 +360,21 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   // Tasks and steps. Every block reads from these same arrays.
   // ---------------------------------------------------------------------------
 
+  const reviewActions = useCollectionActions<ReviewItem>("task_review_items", setReviewItems, repoRef, reportError);
+  const resourceActions = useCollectionActions<Resource>("resources", setResources, repoRef, reportError);
+  const checkInActions = useCollectionActions<CheckIn>("check_ins", setCheckIns, repoRef, reportError);
+  const projectActions = useCollectionActions<Project>("projects", setProjects, repoRef, reportError);
+  const createProject = projectActions.create;
+
+  const ensureProject = useCallback(
+    async (name: string) => {
+      const trimmed = name.trim().slice(0, 120);
+      if (!trimmed) return null;
+      return projects.find((project) => project.name.toLowerCase() === trimmed.toLowerCase()) ?? createProject({ name: trimmed });
+    },
+    [projects, createProject],
+  );
+
   const createTask = useCallback(
     async (input: TaskInput, stepTexts: string[] = []) => {
       try {
@@ -314,8 +416,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       const snapshot: DeletedTaskSnapshot = {
         task,
         steps: steps.filter((step) => step.task_id === id),
+        reviewItems: reviewItems.filter((item) => item.task_id === id),
         linkedNoteIds: notes.filter((note) => note.task_id === id).map((note) => note.id),
         linkedEventIds: events.filter((event) => event.task_id === id).map((event) => event.id),
+        linkedResourceIds: resources.filter((resource) => resource.task_id === id).map((resource) => resource.id),
+        linkedCheckInIds: checkIns.filter((entry) => entry.task_id === id).map((entry) => entry.id),
       };
       try {
         await requireRepo(repoRef).remove("tasks", id);
@@ -323,13 +428,16 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         setSteps((current) => current.filter((step) => step.task_id !== id));
         setNotes((current) => current.map((note) => (note.task_id === id ? { ...note, task_id: null } : note)));
         setEvents((current) => current.map((event) => (event.task_id === id ? { ...event, task_id: null } : event)));
+        setReviewItems((current) => current.filter((item) => item.task_id !== id));
+        setResources((current) => current.map((resource) => (resource.task_id === id ? { ...resource, task_id: null } : resource)));
+        setCheckIns((current) => current.map((entry) => (entry.task_id === id ? { ...entry, task_id: null } : entry)));
         return snapshot;
       } catch (error) {
         reportError(error);
         return null;
       }
     },
-    [tasks, steps, notes, events, reportError],
+    [tasks, steps, reviewItems, notes, events, resources, checkIns, reportError],
   );
 
   // Undo for delete: re-creates the task with the same id and relinks notes/events.
@@ -341,8 +449,17 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         for (const step of snapshot.steps) {
           restoredSteps.push(await requireRepo(repoRef).insert<TaskStep>("task_steps", withoutOwner(step)));
         }
+        const restoredReview: ReviewItem[] = [];
+        for (const item of snapshot.reviewItems) {
+          restoredReview.push(await requireRepo(repoRef).insert<ReviewItem>("task_review_items", withoutOwner(item)));
+        }
         for (const noteId of snapshot.linkedNoteIds) await requireRepo(repoRef).update("notes", noteId, { task_id: task.id });
         for (const eventId of snapshot.linkedEventIds) await requireRepo(repoRef).update("calendar_events", eventId, { task_id: task.id });
+        for (const resourceId of snapshot.linkedResourceIds) await requireRepo(repoRef).update("resources", resourceId, { task_id: task.id });
+        for (const entryId of snapshot.linkedCheckInIds) await requireRepo(repoRef).update("check_ins", entryId, { task_id: task.id });
+        setReviewItems((current) => [...current, ...restoredReview]);
+        setResources((current) => current.map((item) => (snapshot.linkedResourceIds.includes(item.id) ? { ...item, task_id: task.id } : item)));
+        setCheckIns((current) => current.map((item) => (snapshot.linkedCheckInIds.includes(item.id) ? { ...item, task_id: task.id } : item)));
         setTasks((current) => [...current, task]);
         setSteps((current) => [...current, ...restoredSteps]);
         setNotes((current) => current.map((note) => (snapshot.linkedNoteIds.includes(note.id) ? { ...note, task_id: task.id } : note)));
@@ -417,11 +534,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
   const updateNote = useCallback(
     async (id: string, patch: Partial<Note>) => {
-      setNotes((current) => current.map((note) => (note.id === id ? { ...note, ...patch } : note)));
       try {
-        await requireRepo(repoRef).update("notes", id, patch as Row);
+        const updated = await requireRepo(repoRef).update<Note>("notes", id, patch as Row);
+        setNotes((current) => current.map((note) => (note.id === id ? updated : note)));
+        return true;
       } catch (error) {
         reportError(error);
+        return false;
       }
     },
     [reportError],
@@ -508,15 +627,16 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           if (!draftIds.has(block.id)) await requireRepo(repoRef).remove("workspace_blocks", block.id);
         }
         for (const block of draft) {
+          const saved = savedById.get(block.id);
           const fields = {
             block_type: block.block_type,
             title: block.title,
-            config: block.config,
+            // Settings save on their own, so a layout save never overwrites them.
+            config: saved?.config ?? { ...block.config, ...draftConfigs[block.id] },
             layouts: block.layouts,
             mobile_order: block.mobile_order,
             hidden: block.hidden,
           };
-          const saved = savedById.get(block.id);
           if (!saved) {
             result.push(await requireRepo(repoRef).insert<WorkspaceBlock>("workspace_blocks", { ...fields, workspace_id: workspace.id }));
           } else if (JSON.stringify({ ...saved, updated_at: "" }) !== JSON.stringify({ ...saved, ...fields, updated_at: "" })) {
@@ -526,13 +646,14 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           }
         }
         setBlocks(result);
+        setDraftConfigs({});
         return true;
       } catch (error) {
         reportError(error);
         return false;
       }
     },
-    [blocks, workspace, reportError],
+    [blocks, draftConfigs, workspace, reportError],
   );
 
   // Adds blocks directly (used by confirmed proposals and quick-add outside Creative Mode).
@@ -568,6 +689,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
   const updateBlockConfig = useCallback(
     async (id: string, config: Record<string, unknown>) => {
+      if (id.startsWith("new-")) {
+        setDraftConfigs((current) => ({ ...current, [id]: { ...current[id], ...config } }));
+        return;
+      }
       const block = blocks.find((item) => item.id === id);
       if (!block) return;
       const nextConfig = { ...block.config, ...config };
@@ -716,8 +841,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     notificationPreferences,
     workspace,
     blocks,
+    draftConfigs,
     tasks,
     steps,
+    reviewItems,
+    projects,
+    resources,
+    checkIns,
     notes,
     events,
     messages,
@@ -734,6 +864,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     addStep,
     updateStep,
     deleteStep,
+    reviewActions,
+    resourceActions,
+    checkInActions,
+    ensureProject,
     createNote,
     updateNote,
     deleteNote,

@@ -5,8 +5,8 @@ import { Wordmark } from "../brand/brand-mark";
 export function AuthShell({ title, intro, children, footer }: { title: string; intro?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
-      <Link href="/" className="mb-6 rounded-md text-xl" aria-label="Mindcraft home">
-        <Wordmark />
+      <Link href="/" className="mb-6 rounded-md" aria-label="MindCraft home">
+        <Wordmark className="text-3xl" markSize={52} />
       </Link>
       <main className="mc-card w-full max-w-md p-6 sm:p-8">
         <h1 className="text-2xl font-bold">{title}</h1>

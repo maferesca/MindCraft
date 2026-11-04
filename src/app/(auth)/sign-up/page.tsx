@@ -60,7 +60,7 @@ export default function SignUpPage() {
   }
 
   return (
-    <AuthShell title="Create your account" intro="You can set up the rest later. Nothing personal beyond your email is required.">
+    <AuthShell title="Create your account">
       {isSupabaseConfigured ? (
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
           {errors.form ? <FormMessage tone="error">{errors.form}</FormMessage> : null}

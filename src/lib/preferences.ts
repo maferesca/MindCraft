@@ -1,31 +1,61 @@
 import { z } from "zod";
-import { resolveTokens, type AccentId, type ThemeId } from "./themes";
+import { THEMES, THEME_IDS, resolveTokens, type AccentId, type ThemeId } from "./themes";
 
-export const BLOCK_TYPES = ["task_list", "calendar", "next_step", "focus_timer", "notes"] as const;
+export const BLOCK_TYPES = ["task_list", "calendar", "next_step", "focus_timer", "notes", "resources", "check_in"] as const;
+
+// A running timer is stored as timestamps, so refreshing or switching tabs never slows it.
+export const timerSessionSchema = z.object({
+  mode: z.enum(["countdown", "stopwatch"]),
+  phase: z.enum(["work", "break"]),
+  runState: z.enum(["idle", "running", "paused", "finished"]),
+  startedAt: z.number().nullable(),
+  accumulatedMs: z.number().min(0),
+  targetMs: z.number().min(0),
+  endedBy: z.enum(["user", "zero"]).nullable(),
+  taskId: z.string().uuid().nullable(),
+});
+export type TimerSession = z.infer<typeof timerSessionSchema>;
 
 export const FONT_OPTIONS = {
   system: { label: "System default", stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
   arial: { label: "Arial", stack: "Arial, Helvetica, sans-serif" },
   verdana: { label: "Verdana", stack: "Verdana, Geneva, sans-serif" },
   "open-sans": { label: "Open Sans", stack: 'var(--font-open-sans), "Open Sans", Arial, sans-serif' },
+  lexend: { label: "Lexend", stack: "var(--font-lexend), Verdana, sans-serif" },
+  atkinson: { label: "Atkinson Hyperlegible", stack: "var(--font-atkinson), Verdana, sans-serif" },
+  "comic-neue": { label: "Comic Neue", stack: 'var(--font-comic-neue), "Comic Sans MS", sans-serif' },
+  opendyslexic: { label: "OpenDyslexic", stack: "var(--font-opendyslexic), Verdana, sans-serif" },
 } as const;
 
+export const START_HELP_LABELS = {
+  clear_steps: "Clear steps",
+  examples: "An example to follow",
+  time_limit: "A time limit",
+  knowing_why: "Knowing why it matters",
+  quick_win: "Starting with something quick",
+} as const;
+const START_HELP_OPTIONS = Object.keys(START_HELP_LABELS) as [keyof typeof START_HELP_LABELS, ...Array<keyof typeof START_HELP_LABELS>];
+
 export const preferencesSchema = z.object({
-  theme: z.enum(["warm-studio", "clear", "rose", "colorful", "monochrome", "dark"]),
+  theme: z.enum(THEME_IDS),
   accent: z.enum(["theme", "terracotta", "sage", "ocean", "plum", "graphite"]),
-  fontFamily: z.enum(["system", "arial", "verdana", "open-sans"]),
+  fontFamily: z.enum(["system", "arial", "verdana", "open-sans", "lexend", "atkinson", "comic-neue", "opendyslexic"]),
   textSize: z.number().int().min(14).max(24),
   lineHeight: z.number().min(1.3).max(2.2),
   letterSpacing: z.number().min(0).max(0.08),
+  wordSpacing: z.number().min(0).max(0.3),
   density: z.enum(["compact", "comfortable", "spacious"]),
   reducedMotion: z.enum(["system", "on", "off"]),
   sounds: z.boolean(),
-  preferredTools: z.array(z.enum(BLOCK_TYPES)).max(5),
+  preferredTools: z.array(z.enum(BLOCK_TYPES)).max(7),
   responseDetail: z.enum(["brief", "balanced", "detailed"]),
   language: z.string().max(40),
   planningStyle: z.enum(["one_step", "short_list", "full_overview"]),
-  workMinutes: z.number().int().min(5).max(120),
-  breakMinutes: z.number().int().min(1).max(60),
+  focusTime: z.enum(["not_set", "morning", "afternoon", "evening", "varies"]),
+  startHelp: z.array(z.enum(START_HELP_OPTIONS)).max(5),
+  workMinutes: z.number().int().min(1).max(600),
+  breakMinutes: z.number().int().min(1).max(120),
+  timer: timerSessionSchema,
   showStreak: z.boolean(),
   dailyWelcome: z.boolean(),
 });
@@ -35,10 +65,11 @@ export type Preferences = z.infer<typeof preferencesSchema>;
 export const DEFAULT_PREFERENCES: Preferences = {
   theme: "warm-studio",
   accent: "theme",
-  fontFamily: "system",
+  fontFamily: "lexend",
   textSize: 16,
   lineHeight: 1.6,
   letterSpacing: 0,
+  wordSpacing: 0,
   density: "comfortable",
   reducedMotion: "system",
   sounds: false,
@@ -46,8 +77,11 @@ export const DEFAULT_PREFERENCES: Preferences = {
   responseDetail: "brief",
   language: "auto",
   planningStyle: "short_list",
+  focusTime: "not_set",
+  startHelp: [],
   workMinutes: 25,
   breakMinutes: 5,
+  timer: { mode: "countdown", phase: "work", runState: "idle", startedAt: null, accumulatedMs: 0, targetMs: 0, endedBy: null, taskId: null },
   showStreak: true,
   dailyWelcome: true,
 };
@@ -79,6 +113,7 @@ export function preferenceStyleVariables(preferences: Preferences): Record<strin
     "--text-base": `${preferences.textSize}px`,
     "--line-height": String(preferences.lineHeight),
     "--letter-spacing": `${preferences.letterSpacing}em`,
+    "--word-spacing": `${preferences.wordSpacing}em`,
     "--density": String(DENSITY_SCALE[preferences.density]),
   };
   for (const [name, value] of Object.entries(tokens)) {
@@ -94,7 +129,7 @@ export function applyPreferencesToDocument(preferences: Preferences) {
   }
   root.dataset.theme = preferences.theme;
   root.dataset.motion = preferences.reducedMotion;
-  root.style.colorScheme = preferences.theme === "dark" ? "dark" : "light";
+  root.style.colorScheme = THEMES[preferences.theme].dark ? "dark" : "light";
   // Font size on <html> scales every rem-based size, including dialogs and chat.
   root.style.fontSize = `${preferences.textSize}px`;
 }
@@ -106,6 +141,7 @@ export const PREFERENCE_LABELS: Partial<Record<keyof Preferences, string>> = {
   textSize: "Text size",
   lineHeight: "Line spacing",
   letterSpacing: "Letter spacing",
+  wordSpacing: "Word spacing",
   density: "Information density",
   reducedMotion: "Motion",
   sounds: "Sounds",

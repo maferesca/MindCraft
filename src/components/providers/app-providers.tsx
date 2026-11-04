@@ -34,7 +34,7 @@ function DataGate({ children }: { children: ReactNode }) {
   if (status === "ready") return <>{children}</>;
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-4 text-center">
-      <BrandMark size={40} />
+      <BrandMark size={56} />
       {status === "error" ? (
         <div role="alert" className="max-w-md">
           <p className="text-lg font-semibold">Your workspace couldn&apos;t load.</p>

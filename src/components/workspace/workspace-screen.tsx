@@ -12,7 +12,7 @@ import { SettingsDialog } from "../settings/settings-dialog";
 import { AppHeader } from "../shell/app-header";
 import { OfflineBanner } from "../shell/offline-banner";
 import { ReminderBanner } from "../shell/reminder-banner";
-import { MissingInfoDialog } from "../tasks/missing-info-dialog";
+import { MissingInfoDialog } from "../blocks/check-in-form";
 import { TaskEditorDialog } from "../tasks/task-editor-dialog";
 import { SearchDialog } from "./search-dialog";
 import { WorkspaceView } from "./workspace-view";

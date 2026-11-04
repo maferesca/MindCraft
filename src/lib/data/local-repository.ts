@@ -103,8 +103,10 @@ export function createLocalRepository(): Repository | null {
       // Mirror the database's cascade and set-null rules.
       if (table === "tasks") {
         database.tables.task_steps = rows("task_steps").filter((step) => step.task_id !== key);
-        for (const note of rows("notes")) if (note.task_id === key) note.task_id = null;
-        for (const event of rows("calendar_events")) if (event.task_id === key) event.task_id = null;
+        database.tables.task_review_items = rows("task_review_items").filter((item) => item.task_id !== key);
+        for (const linked of ["notes", "calendar_events", "resources", "check_ins"] as const) {
+          for (const row of rows(linked)) if (row.task_id === key) row.task_id = null;
+        }
       }
       if (table === "conversations") {
         database.tables.messages = rows("messages").filter((message) => message.conversation_id !== key);

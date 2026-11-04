@@ -22,7 +22,7 @@ interface History {
 }
 
 export function WorkspaceView() {
-  const { blocks, workspace, saveLayout } = useWorkspaceData();
+  const { blocks, workspace, saveLayout, draftConfigs } = useWorkspaceData();
   const { creativeMode, setCreativeMode } = useWorkspaceUI();
   const { announce, notify } = useNotify();
   const { width, containerRef, mounted } = useContainerWidth();
@@ -52,7 +52,11 @@ export function WorkspaceView() {
   }, []);
 
   const draft = history?.present ?? blocks;
-  const shown = creativeMode ? draft : blocks;
+  // Block settings save immediately, so a layout draft always shows the current ones.
+  const savedConfig = new Map(blocks.map((block) => [block.id, block.config]));
+  const shown = creativeMode
+    ? draft.map((block) => ({ ...block, config: savedConfig.get(block.id) ?? { ...block.config, ...draftConfigs[block.id] } }))
+    : blocks;
   const visibleCount = shown.filter((block) => !block.hidden).length;
   const base = { user_id: workspace?.user_id ?? "", workspace_id: workspace?.id ?? "" };
 
@@ -61,7 +65,7 @@ export function WorkspaceView() {
     const prepared = breakpoint === "sm" ? draft : withPositions(draft, gridBreakpoint);
     const block = addBlockToDraft(prepared, type, base, gridBreakpoint, at);
     commit([...prepared, block]);
-    announce(`${BLOCK_DEFINITIONS[type].label} block added. Save to keep it.`);
+    notify(`${BLOCK_DEFINITIONS[type].label} added. Save to keep it.`);
   }
 
   function actionsFor(block: WorkspaceBlock, index: number, total: number): CreativeActions | null {
@@ -144,11 +148,11 @@ export function WorkspaceView() {
   }, [creativeMode]);
 
   return (
-    <div className={creativeMode ? (breakpoint === "sm" ? "pb-[50vh]" : "pb-36") : ""}>
+    <div className={creativeMode ? "pb-36" : ""}>
       {creativeMode ? (
         <div className="sticky top-[var(--header-height)] z-30 mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface px-3 py-2 shadow-sm">
           <p className="mr-auto font-semibold">
-            Creative Mode <span className="mc-hint font-normal">· changes apply when you save</span>
+            Creative Mode
           </p>
           <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={undo} disabled={!history?.past.length}>
             <Undo2 size={16} aria-hidden="true" /> Undo
@@ -172,7 +176,7 @@ export function WorkspaceView() {
           creativeMode && visibleCount === 0 ? (
             <div className="mc-grid-guides relative flex min-h-[50vh] items-center justify-center p-6 text-center">
               <p className="mc-hint max-w-sm text-base">
-                {breakpoint === "sm" ? "Tap a block in the inventory to add it." : "Drag a block from the inventory below, or press one to add it."}
+                {breakpoint === "sm" ? "Tap a block below to add it." : "Drag a block here, or click one below to add it."}
               </p>
               <DropTarget onDropType={(type) => draggingType && addBlock(type)} draggingType={draggingType} />
             </div>
@@ -201,6 +205,7 @@ export function WorkspaceView() {
         <InventoryDock
           phone={breakpoint === "sm"}
           hiddenBlocks={draft.filter((block) => block.hidden)}
+          draggingType={draggingType}
           onAdd={(type) => addBlock(type)}
           onRestore={(id) => {
             commit(draft.map((block) => (block.id === id ? { ...block, hidden: false } : block)));
@@ -214,7 +219,6 @@ export function WorkspaceView() {
         open={Boolean(pendingRemoval)}
         onOpenChange={(open) => !open && setPendingRemoval(null)}
         title="Remove this block?"
-        description="Removing a block only removes this view from your workspace."
         footer={
           <>
             <button type="button" className="mc-btn mc-btn-ghost" onClick={() => setPendingRemoval(null)}>
@@ -246,10 +250,7 @@ export function WorkspaceView() {
           </>
         }
       >
-        <p>
-          Your tasks, notes, and events stay saved and keep appearing in other blocks. You can add this block again any time from the
-          inventory.
-        </p>
+        <p>Your tasks, notes, and events stay saved.</p>
       </Modal>
     </div>
   );

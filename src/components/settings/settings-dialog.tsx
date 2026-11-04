@@ -12,6 +12,7 @@ import { SelectField, TextField } from "../ui/field";
 import { Modal } from "../ui/modal";
 import { useNotify } from "../ui/notifications";
 import { AppearanceFields, AppearancePreview, Segmented } from "./appearance-fields";
+import { WorkStyleFields } from "./work-style-fields";
 
 const SECTIONS: Array<[SettingsSection, string]> = [
   ["profile", "Profile"],
@@ -33,7 +34,7 @@ export function SettingsDialog() {
             <Tabs.Trigger
               key={value}
               value={value}
-              className="shrink-0 rounded-lg px-3 py-2 font-semibold text-text-muted data-[state=active]:bg-primary-soft data-[state=active]:text-text"
+              className="shrink-0 rounded-lg px-3 py-2 font-semibold text-text-muted data-[state=active]:bg-primary-soft data-[state=active]:text-text data-[state=active]:underline data-[state=active]:underline-offset-4"
             >
               {label}
             </Tabs.Trigger>
@@ -78,7 +79,7 @@ function ProfileSection() {
       }}
     >
       <TextField label="Display name" optional value={name} maxLength={60} onChange={(event) => setName(event.target.value)} />
-      <SelectField label="Timezone" hint="Used for your daily welcome and streak, so days match your local calendar." value={timezone} onChange={(event) => setTimezone(event.target.value)}>
+      <SelectField label="Timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)}>
         {zones.map((zone) => (
           <option key={zone} value={zone}>
             {zone}
@@ -94,11 +95,10 @@ function ProfileSection() {
 
 function AppearanceSection() {
   const { preferences, updatePreferences } = useWorkspaceData();
-  const appearanceKeys: Array<keyof Preferences> = ["theme", "accent", "fontFamily", "textSize", "lineHeight", "letterSpacing", "density", "reducedMotion", "sounds"];
+  const appearanceKeys: Array<keyof Preferences> = ["theme", "accent", "fontFamily", "textSize", "lineHeight", "letterSpacing", "wordSpacing", "density", "reducedMotion", "sounds"];
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
       <div>
-        <p className="mc-hint mb-4">Changes apply right away across Mindcraft. Pick what feels comfortable for you.</p>
         <AppearanceFields value={preferences} onChange={updatePreferences} />
         <button
           type="button"
@@ -144,7 +144,7 @@ function WorkspaceSection() {
 
       <fieldset>
         <legend className="mc-label">Preferred tools</legend>
-        <p className="mc-hint mb-2">Used to suggest a starter layout. Nothing is added without your confirmation.</p>
+        <p className="mc-hint mb-2">Used to suggest a starter layout.</p>
         <div className="grid gap-2 sm:grid-cols-2">
           {BLOCK_ORDER.map((type) => (
             <label key={type} className="flex min-h-11 items-center gap-2 rounded-lg border border-border px-3">
@@ -159,10 +159,10 @@ function WorkspaceSection() {
         <TextField
           label="Focus session length (minutes)"
           type="number"
-          min={5}
-          max={120}
+          min={1}
+          max={600}
           value={preferences.workMinutes}
-          onChange={(event) => Number(event.target.value) >= 5 && updatePreferences({ workMinutes: Number(event.target.value) })}
+          onChange={(event) => Number(event.target.value) >= 1 && updatePreferences({ workMinutes: Math.round(Number(event.target.value)) })}
         />
         <TextField
           label="Break length (minutes)"
@@ -174,15 +174,7 @@ function WorkspaceSection() {
         />
       </div>
 
-      <div>
-        <p className="mc-label">Planning style</p>
-        <Segmented
-          label="Planning style"
-          value={preferences.planningStyle}
-          options={[["one_step", "One step at a time"], ["short_list", "A short list"], ["full_overview", "The full overview"]]}
-          onChange={(value) => updatePreferences({ planningStyle: value as Preferences["planningStyle"] })}
-        />
-      </div>
+      <WorkStyleFields value={preferences} onChange={updatePreferences} fields={["planningStyle", "focusTime", "startHelp"]} />
 
       <div className="flex flex-col gap-2">
         <label className="flex items-center gap-2">
@@ -197,7 +189,7 @@ function WorkspaceSection() {
 
       <div className="rounded-xl border border-border p-4">
         <h3 className="font-bold">Reset workspace layout</h3>
-        <p className="mc-hint mt-1">Removes every block from your workspace. Your tasks, notes, and events are kept.</p>
+        <p className="mc-hint mt-1">Your tasks, notes, and events are kept.</p>
         <button
           type="button"
           className="mc-btn mc-btn-danger mt-3"
@@ -223,8 +215,7 @@ function NotificationsSection() {
   return (
     <div className="flex max-w-2xl flex-col gap-5">
       <p className="rounded-xl bg-surface-muted p-3">
-        Reminders appear <strong>inside Mindcraft</strong> when you open it. Background or push notifications are not available yet, so
-        nothing is sent while Mindcraft is closed.
+        Reminders only appear while MindCraft is open.
       </p>
       <div>
         <p className="mc-label">Reminder style</p>
@@ -234,7 +225,6 @@ function NotificationsSection() {
           options={[["off", "Off"], ["friendly", "Friendly"], ["playful", "Playful"], ["minimal", "Minimal"]]}
           onChange={(value) => update({ style: value as NotificationPreferences["style"] })}
         />
-        <p className="mc-hint mt-2">Example: &quot;Your space is here whenever you&apos;re ready.&quot;</p>
       </div>
       {prefs.style !== "off" ? (
         <>
@@ -302,18 +292,18 @@ function AiSection() {
       <section className="rounded-xl border border-border p-4">
         <h3 className="font-bold">What is sent to the AI provider</h3>
         <p className="mt-1">
-          The assistant uses Google&apos;s Gemini API, called from the Mindcraft server. When you ask for help, Mindcraft sends only:
+          The assistant uses Google&apos;s Gemini API, called from the MindCraft server. When you ask for help, MindCraft sends only:
         </p>
         <ul className="mt-2 list-disc pl-5">
           <li>your message and the last few messages of this chat</li>
           <li>the selected task (title, description, expected result, deadline, priority, status, steps)</li>
           <li>the titles, status, and deadlines of your other open tasks</li>
           <li>which block types are in your workspace</li>
-          <li>your response detail, language, and planning style preferences</li>
+          <li>your response detail, language, planning style, and how you said you like to work</li>
         </ul>
         <p className="mt-2">
           Notes, calendar events, your email, and your other settings are not sent. Voice recordings are sent once to be turned into text and are
-          not stored by Mindcraft. The assistant can only suggest changes; nothing is changed until you apply a suggestion.
+          not stored by MindCraft. The assistant can only suggest changes; nothing is changed until you apply a suggestion.
         </p>
       </section>
 
@@ -347,7 +337,7 @@ function AccountSection() {
     <div className="flex max-w-md flex-col gap-5">
       {mode === "demo" ? (
         <p className="rounded-xl bg-surface-muted p-3">
-          You are using the local demo. Everything is stored in this browser only and is removed when you leave the demo.
+          Demo data stays in this browser and is deleted when you leave.
         </p>
       ) : (
         <>
@@ -390,7 +380,7 @@ function AccountSection() {
         {mode === "demo" ? "Leave demo and delete demo data" : "Sign out"}
       </button>
       {mode !== "demo" ? (
-        <p className="mc-hint">To delete your account, contact the team running this Mindcraft instance. Self-service deletion is not built yet.</p>
+        <p className="mc-hint">To delete your account, contact the MindCraft team.</p>
       ) : null}
     </div>
   );

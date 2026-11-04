@@ -2,9 +2,11 @@
 
 import type { WorkspaceBlock } from "@/lib/types";
 import { CalendarBlock } from "../blocks/calendar-block";
+import { CheckInBlock } from "../blocks/check-in-block";
 import { FocusTimerBlock } from "../blocks/focus-timer-block";
-import { NextStepBlock } from "../blocks/next-step-block";
 import { NotesBlock } from "../blocks/notes-block";
+import { ResourcesBlock } from "../blocks/resources-block";
+import { TaskGuideBlock } from "../blocks/task-guide-block";
 import { TaskListBlock } from "../blocks/task-list-block";
 
 // Blocks are views over shared records: they receive only their own display config.
@@ -15,10 +17,14 @@ export function BlockContent({ block }: { block: WorkspaceBlock }) {
     case "calendar":
       return <CalendarBlock block={block} />;
     case "next_step":
-      return <NextStepBlock block={block} />;
+      return <TaskGuideBlock block={block} />;
     case "focus_timer":
       return <FocusTimerBlock />;
     case "notes":
       return <NotesBlock block={block} />;
+    case "resources":
+      return <ResourcesBlock block={block} />;
+    case "check_in":
+      return <CheckInBlock />;
   }
 }

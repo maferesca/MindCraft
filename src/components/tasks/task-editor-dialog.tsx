@@ -1,14 +1,14 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { stepTextSchema, taskInputSchema } from "@/lib/schemas";
-import { STATUS_LABELS, stepsForTask } from "@/lib/task-helpers";
+import { taskInputSchema } from "@/lib/schemas";
+import { STATUS_LABELS, formatDeadline, stepsForTask } from "@/lib/task-helpers";
 import type { Task, TaskStatus } from "@/lib/types";
+import { ChecklistEditor } from "../blocks/checklist-editor";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
 import { SelectField, TextAreaField, TextField } from "../ui/field";
-import { IconButton } from "../ui/icon-button";
 import { Modal } from "../ui/modal";
 import { useNotify } from "../ui/notifications";
 
@@ -21,29 +21,35 @@ export function TaskEditorDialog() {
 }
 
 function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => void }) {
-  const { createTask, updateTask, steps, addStep, updateStep, deleteStep } = useWorkspaceData();
-  const { announce } = useNotify();
+  const { createTask, updateTask, deleteTask, restoreTask, ensureProject, projects, steps, addStep, updateStep, deleteStep } = useWorkspaceData();
+  const { announce, notify } = useNotify();
+  const projectName = projects.find((project) => project.id === task?.project_id)?.name ?? "";
   const [values, setValues] = useState({
     title: task?.title ?? "",
     description: task?.description ?? "",
     expected_result: task?.expected_result ?? "",
     due_date: task?.due_date ?? "",
+    due_time: task?.due_time?.slice(0, 5) ?? "",
+    project: projectName,
+    assignee: task?.assignee ?? "",
     priority: task?.priority ?? "",
     source_link: task?.source_link ?? "",
     status: task?.status ?? "todo",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [newStep, setNewStep] = useState("");
+  // A deadline only changes through the explicit Edit deadline action.
+  const [editingDeadline, setEditingDeadline] = useState(!task);
   const taskSteps = task ? stepsForTask(steps, task.id) : [];
 
-  const set = (key: keyof typeof values) => (event: { target: { value: string } }) =>
-    setValues((current) => ({ ...current, [key]: event.target.value }));
+  const set = (key: keyof typeof values) => (event: { target: { value: string } }) => setValues((current) => ({ ...current, [key]: event.target.value }));
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    const { project, ...fields } = values;
     const parsed = taskInputSchema.safeParse({
-      ...values,
+      ...fields,
       due_date: values.due_date || null,
+      due_time: values.due_date && values.due_time ? values.due_time : null,
       priority: values.priority || null,
     });
     if (!parsed.success) {
@@ -53,60 +59,57 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
       return;
     }
     setErrors({});
+    const linkedProject = await ensureProject(project);
+    const input = { ...parsed.data, project_id: linkedProject?.id ?? null };
     if (task) {
-      await updateTask(task.id, parsed.data as Partial<Task>);
+      await updateTask(task.id, input as Partial<Task>);
       announce("Task saved.");
     } else {
-      const created = await createTask(parsed.data);
+      const created = await createTask(input);
       if (created) announce(`Task added: ${created.title}`);
     }
     onClose();
   }
 
-  async function handleAddStep() {
+  async function handleDelete() {
     if (!task) return;
-    const parsed = stepTextSchema.safeParse(newStep);
-    if (!parsed.success) return;
-    await addStep(task.id, parsed.data);
-    setNewStep("");
-  }
-
-  async function moveStep(index: number, direction: -1 | 1) {
-    const other = taskSteps[index + direction];
-    const current = taskSteps[index];
-    if (!other || !current) return;
-    await updateStep(current.id, { position: other.position });
-    await updateStep(other.id, { position: current.position === other.position ? current.position + direction : current.position });
+    const snapshot = await deleteTask(task.id);
+    onClose();
+    if (snapshot) notify(`Deleted "${task.title}".`, { action: { label: "Undo", onClick: () => restoreTask(snapshot) } });
   }
 
   return (
-    <Modal
-      open
-      onOpenChange={(open) => !open && onClose()}
-      title={task ? "Edit task" : "New task"}
-      description="Only the title is required. Leave anything you don't know empty."
-      wide
-    >
+    <Modal open onOpenChange={(open) => !open && onClose()} title={task ? "Task details" : "Add task"} description={task ? undefined : "Only the title is required."} wide>
       <form onSubmit={handleSubmit} noValidate className="grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
           <TextField label="Title" value={values.title} onChange={set("title")} error={errors.title} maxLength={200} autoFocus />
         </div>
         <div className="md:col-span-2">
-          <TextAreaField label="Description" optional value={values.description} onChange={set("description")} maxLength={4000} />
+          <TextAreaField label="Instructions" optional value={values.description} onChange={set("description")} maxLength={4000} />
         </div>
         <div className="md:col-span-2">
-          <TextField
-            label="Expected result"
-            optional
-            hint="What does finished look like? For example: a one-page summary in the team folder."
-            value={values.expected_result}
-            onChange={set("expected_result")}
-            maxLength={1000}
-          />
+          <TextField label="Expected deliverable" optional value={values.expected_result} onChange={set("expected_result")} maxLength={1000} />
         </div>
-        <TextField label="Deadline" optional type="date" value={values.due_date} onChange={set("due_date")} error={errors.due_date} hint="A deadline shows on the calendar. It does not book time." />
-        <SelectField label="Priority" optional value={values.priority} onChange={set("priority")}>
-          <option value="">Not set</option>
+
+        {editingDeadline ? (
+          <div className="grid gap-4 sm:grid-cols-2 md:col-span-2">
+            <TextField label="Deadline" optional type="date" value={values.due_date} onChange={set("due_date")} error={errors.due_date} />
+            <TextField label="Deadline time" optional type="time" value={values.due_time} disabled={!values.due_date} onChange={set("due_time")} />
+          </div>
+        ) : (
+          <div className="md:col-span-2">
+            <p className="mc-label">Deadline</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span>{task ? formatDeadline(task) : ""}</span>
+              <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm" onClick={() => setEditingDeadline(true)}>
+                <Pencil size={14} aria-hidden="true" /> Edit deadline
+              </button>
+            </div>
+          </div>
+        )}
+
+        <SelectField label="Priority" value={values.priority} onChange={set("priority")}>
+          <option value="">None</option>
           <option value="low">Low</option>
           <option value="medium">Medium</option>
           <option value="high">High</option>
@@ -118,79 +121,40 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
             </option>
           ))}
         </SelectField>
-        <TextField label="Source link" optional type="url" placeholder="https://…" value={values.source_link} onChange={set("source_link")} maxLength={1000} />
+        <TextField label="Project" optional list="task-project-options" value={values.project} maxLength={120} onChange={set("project")} />
+        <datalist id="task-project-options">
+          {projects.map((project) => (
+            <option key={project.id} value={project.name} />
+          ))}
+        </datalist>
+        <TextField label="Assignee" optional value={values.assignee} maxLength={120} onChange={set("assignee")} />
+        <div className="md:col-span-2">
+          <TextField label="Source link" optional type="url" placeholder="https://…" value={values.source_link} onChange={set("source_link")} maxLength={1000} />
+        </div>
 
         {task ? (
           <fieldset className="md:col-span-2">
-            <legend className="mc-label">Your steps</legend>
-            <p className="mc-hint mb-2">Personal steps for this task. Completing steps does not complete the task.</p>
-            <ol className="flex flex-col gap-1">
-              {taskSteps.map((step, index) => (
-                <li key={step.id} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    className="h-5 w-5 shrink-0"
-                    checked={step.done}
-                    aria-label={`Step ${index + 1} done`}
-                    onChange={(event) => updateStep(step.id, { done: event.target.checked })}
-                  />
-                  <label className="sr-only" htmlFor={`step-${step.id}`}>
-                    Step {index + 1}
-                  </label>
-                  <input
-                    id={`step-${step.id}`}
-                    className="mc-input"
-                    defaultValue={step.text}
-                    maxLength={500}
-                    onBlur={(event) => {
-                      const text = event.target.value.trim();
-                      if (text && text !== step.text) updateStep(step.id, { text });
-                    }}
-                  />
-                  <IconButton size="sm" label="Move step earlier" icon={<ArrowUp size={16} />} disabled={index === 0} onClick={() => moveStep(index, -1)} />
-                  <IconButton
-                    size="sm"
-                    label="Move step later"
-                    icon={<ArrowDown size={16} />}
-                    disabled={index === taskSteps.length - 1}
-                    onClick={() => moveStep(index, 1)}
-                  />
-                  <IconButton size="sm" label="Delete step" icon={<Trash2 size={16} />} onClick={() => deleteStep(step.id)} />
-                </li>
-              ))}
-            </ol>
-            <div className="mt-2 flex gap-2">
-              <label className="sr-only" htmlFor="new-step">
-                New step
-              </label>
-              <input
-                id="new-step"
-                className="mc-input"
-                placeholder="Add a step…"
-                value={newStep}
-                maxLength={500}
-                onChange={(event) => setNewStep(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    handleAddStep();
-                  }
-                }}
-              />
-              <button type="button" className="mc-btn mc-btn-secondary shrink-0" onClick={handleAddStep}>
-                <Plus size={16} aria-hidden="true" /> Add step
-              </button>
-            </div>
+            <legend className="mc-label">Steps</legend>
+            <ChecklistEditor items={taskSteps} noun="step" onAdd={(text) => addStep(task.id, text)} onChange={updateStep} onDelete={deleteStep} />
           </fieldset>
         ) : null}
 
-        <div className="flex flex-wrap justify-end gap-2 md:col-span-2">
-          <button type="button" className="mc-btn mc-btn-ghost" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="mc-btn mc-btn-primary">
-            {task ? "Save task" : "Add task"}
-          </button>
+        <div className="flex flex-wrap justify-between gap-2 md:col-span-2">
+          {task ? (
+            <button type="button" className="mc-btn mc-btn-danger" onClick={handleDelete}>
+              Delete task
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <button type="button" className="mc-btn mc-btn-ghost" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="mc-btn mc-btn-primary">
+              {task ? "Save task" : "Add task"}
+            </button>
+          </div>
         </div>
       </form>
     </Modal>

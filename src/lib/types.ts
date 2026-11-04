@@ -1,9 +1,9 @@
 // Domain records. Field names match the database columns (snake_case) so
 // rows can pass between Supabase and the UI without a mapping layer.
 
-export type TaskStatus = "todo" | "in_progress" | "blocked" | "done";
+export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "low" | "medium" | "high";
-export type BlockType = "task_list" | "calendar" | "next_step" | "focus_timer" | "notes";
+export type BlockType = "task_list" | "calendar" | "next_step" | "focus_timer" | "notes" | "resources" | "check_in";
 export type Breakpoint = "lg" | "md";
 
 export interface Profile {
@@ -20,6 +20,9 @@ export interface Task {
   description: string | null;
   expected_result: string | null;
   due_date: string | null; // yyyy-MM-dd, never guessed
+  due_time: string | null; // HH:mm[:ss] in the user's timezone; null means a date-only deadline
+  project_id: string | null;
+  assignee: string | null;
   priority: TaskPriority | null;
   source_link: string | null;
   status: TaskStatus;
@@ -38,12 +41,66 @@ export interface TaskStep {
   updated_at: string;
 }
 
+export interface ReviewItem {
+  id: string;
+  user_id: string;
+  task_id: string;
+  text: string;
+  position: number;
+  done: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Project {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Note {
   id: string;
   user_id: string;
   title: string | null;
-  body: string;
+  body: string; // Plain text; "- " bullets and "- [ ] " checklist lines are rendered
+  pinned: boolean;
   task_id: string | null;
+  project_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Resource {
+  id: string;
+  user_id: string;
+  name: string;
+  url: string;
+  description: string | null;
+  favorite: boolean;
+  task_id: string | null;
+  project_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CheckInFollowUp {
+  text: string;
+  created_at: string;
+}
+
+export interface CheckIn {
+  id: string;
+  user_id: string;
+  kind: "progress" | "help";
+  task_id: string | null; // A reference, so the task's current title and status show
+  completed_text: string | null;
+  next_text: string | null;
+  blocking: string | null;
+  support: string | null;
+  help_status: "open" | "waiting" | "resolved" | null;
+  follow_ups: CheckInFollowUp[];
   created_at: string;
   updated_at: string;
 }

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { sanitizeProposals } from "../ai/proposal-guard";
 import { detectDeclines } from "../ai/client";
-import { positionsForBreakpoint, sortForPhone } from "../blocks";
+import { CATALOG_ITEMS } from "../block-catalog";
+import { BLOCK_ORDER, positionsForBreakpoint, sortForPhone } from "../blocks";
 import { isWithinQuietHours, nextStreak } from "../dates";
 import { moveInOrder } from "../layout-edit";
-import { normalizePreferences } from "../preferences";
-import type { AssistantContext } from "../schemas";
+import { DEFAULT_PREFERENCES, normalizePreferences } from "../preferences";
+import { proposalSchema, type AssistantContext } from "../schemas";
+import { THEME_IDS } from "../themes";
 import type { WorkspaceBlock } from "../types";
 
 const TASK_ID = "6f1c2c7e-6a43-4e0a-9d1b-2f6c2c1a9b10";
@@ -124,7 +126,29 @@ describe("assistant declines (acceptance check 9)", () => {
   });
 });
 
+describe("block catalog", () => {
+  it("offers every block type exactly once", () => {
+    expect(CATALOG_ITEMS.map((item) => item.blockType).sort()).toEqual([...BLOCK_ORDER].sort());
+  });
+});
+
 describe("preferences", () => {
+  it("keeps work style answers and rejects unknown ones", () => {
+    const prefs = normalizePreferences({ focusTime: "morning", startHelp: ["clear_steps"] });
+    expect(prefs).toMatchObject({ focusTime: "morning", startHelp: ["clear_steps"] });
+    expect(normalizePreferences({ startHelp: ["mind_reading"] }).startHelp).toEqual([]);
+  });
+
+  it("does not let AI proposals change the running timer", () => {
+    const parsed = proposalSchema.safeParse({ type: "suggest_preferences", summary: "x", changes: { timer: DEFAULT_PREFERENCES.timer } });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("accepts every theme, including ids saved before the palette update", () => {
+    for (const theme of THEME_IDS) expect(normalizePreferences({ theme }).theme).toBe(theme);
+    expect(THEME_IDS).toEqual(expect.arrayContaining(["clear", "rose", "dark"]));
+  });
+
   it("drops invalid stored values instead of failing", () => {
     const prefs = normalizePreferences({ theme: "neon", textSize: 18, preferredTools: ["notes", "hack"] });
     expect(prefs.theme).toBe("warm-studio");

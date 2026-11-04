@@ -1,4 +1,5 @@
 import { preferenceStyleVariables, type Preferences } from "./preferences";
+import { THEMES } from "./themes";
 
 const CACHE_KEY = "mindcraft-appearance";
 
@@ -11,6 +12,7 @@ export function cacheAppearance(preferences: Preferences) {
       JSON.stringify({
         vars: preferenceStyleVariables(preferences),
         theme: preferences.theme,
+        dark: THEMES[preferences.theme].dark,
         motion: preferences.reducedMotion,
         size: preferences.textSize,
       }),
@@ -28,4 +30,4 @@ export function clearAppearanceCache() {
   }
 }
 
-export const APPEARANCE_BOOTSTRAP_SCRIPT = `(function(){try{var c=JSON.parse(localStorage.getItem("${CACHE_KEY}")||"null");if(!c)return;var r=document.documentElement;for(var k in c.vars)r.style.setProperty(k,c.vars[k]);r.dataset.theme=c.theme;r.dataset.motion=c.motion;r.style.fontSize=c.size+"px";r.style.colorScheme=c.theme==="dark"?"dark":"light";}catch(e){}})();`;
+export const APPEARANCE_BOOTSTRAP_SCRIPT = `(function(){try{var c=JSON.parse(localStorage.getItem("${CACHE_KEY}")||"null");if(!c)return;var r=document.documentElement;for(var k in c.vars)r.style.setProperty(k,c.vars[k]);r.dataset.theme=c.theme;r.dataset.motion=c.motion;r.style.fontSize=c.size+"px";r.style.colorScheme=c.dark||c.theme==="dark"?"dark":"light";}catch(e){}})();`;

@@ -1,11 +1,11 @@
 "use client";
 
-import { RotateCcw } from "lucide-react";
+import { Check, Eye, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { DEFAULT_PREFERENCES, FONT_OPTIONS, type Preferences } from "@/lib/preferences";
 import { ACCENTS, THEMES, resolveTokens, type ThemeId } from "@/lib/themes";
 
-type Field = "theme" | "accent" | "fontFamily" | "textSize" | "lineHeight" | "letterSpacing" | "density" | "reducedMotion" | "sounds";
+type Field = "theme" | "accent" | "fontFamily" | "textSize" | "lineHeight" | "letterSpacing" | "wordSpacing" | "density" | "reducedMotion" | "sounds";
 
 interface AppearanceFieldsProps {
   value: Preferences;
@@ -13,7 +13,7 @@ interface AppearanceFieldsProps {
   fields?: Field[];
 }
 
-const ALL_FIELDS: Field[] = ["theme", "accent", "fontFamily", "textSize", "lineHeight", "letterSpacing", "density", "reducedMotion", "sounds"];
+const ALL_FIELDS: Field[] = ["theme", "accent", "fontFamily", "textSize", "lineHeight", "letterSpacing", "wordSpacing", "density", "reducedMotion", "sounds"];
 
 // Shared appearance controls for onboarding and settings. Each setting has
 // its own "Reset" so people can undo one choice without losing the others.
@@ -25,8 +25,13 @@ export function AppearanceFields({ value, onChange, fields = ALL_FIELDS }: Appea
   return (
     <div className="flex flex-col gap-5">
       {show("theme") ? (
-        <SettingRow label="Theme" onReset={() => reset("theme")} isDefault={isDefault("theme")}>
-          <div role="radiogroup" aria-label="Theme" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <SettingRow
+          label="Theme"
+          hint="Blue & Orange stays clear with most types of color blindness."
+          onReset={() => reset("theme")}
+          isDefault={isDefault("theme")}
+        >
+          <div role="radiogroup" aria-label="Theme" className="flex flex-wrap gap-1.5">
             {(Object.keys(THEMES) as ThemeId[]).map((id) => {
               const tokens = THEMES[id].tokens;
               const selected = value.theme === id;
@@ -37,14 +42,14 @@ export function AppearanceFields({ value, onChange, fields = ALL_FIELDS }: Appea
                   role="radio"
                   aria-checked={selected}
                   onClick={() => onChange({ theme: id })}
-                  className={`flex items-center gap-2 rounded-xl border-2 p-2 text-left ${selected ? "border-primary" : "border-border"}`}
+                  className={`inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-full border-2 px-2 text-sm ${selected ? "border-primary font-semibold" : "border-border"}`}
                 >
-                  <span aria-hidden="true" className="flex h-8 w-10 shrink-0 overflow-hidden rounded-md border" style={{ background: tokens.background, borderColor: tokens.border }}>
-                    <span className="m-1 h-6 w-3 rounded-sm" style={{ background: tokens.surface }} />
-                    <span className="my-2 h-4 w-3 rounded-sm" style={{ background: tokens.primary }} />
+                  <span aria-hidden="true" className="flex h-5 w-7 shrink-0 items-center justify-center gap-0.5 overflow-hidden rounded-full border" style={{ background: tokens.background, borderColor: tokens.border }}>
+                                        <span className="h-3 w-1.5 rounded-sm" style={{ background: tokens.primary }} />
+                    <span className="h-3 w-1.5 rounded-sm" style={{ background: tokens.secondary }} />
                   </span>
-                  <span className="font-semibold">{THEMES[id].label}</span>
-                  {selected ? <span className="sr-only">(selected)</span> : null}
+                  {THEMES[id].label}
+                  <SelectedMark selected={selected} />
                 </button>
               );
             })}
@@ -65,10 +70,11 @@ export function AppearanceFields({ value, onChange, fields = ALL_FIELDS }: Appea
                   role="radio"
                   aria-checked={selected}
                   onClick={() => onChange({ accent: id })}
-                  className={`inline-flex min-h-11 items-center gap-2 rounded-full border-2 px-3 ${selected ? "border-primary font-semibold" : "border-border"}`}
+                  className={`inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-full border-2 px-2.5 text-sm ${selected ? "border-primary font-semibold" : "border-border"}`}
                 >
                   <span aria-hidden="true" className="h-4 w-4 rounded-full" style={{ background: color }} />
                   {id === "theme" ? "Theme default" : ACCENTS[id as keyof typeof ACCENTS].label}
+                  <SelectedMark selected={selected} />
                 </button>
               );
             })}
@@ -77,8 +83,13 @@ export function AppearanceFields({ value, onChange, fields = ALL_FIELDS }: Appea
       ) : null}
 
       {show("fontFamily") ? (
-        <SettingRow label="Font" onReset={() => reset("fontFamily")} isDefault={isDefault("fontFamily")}>
-          <div role="radiogroup" aria-label="Font" className="grid grid-cols-2 gap-2">
+        <SettingRow
+          label="Font"
+          hint="Some people find Lexend, Atkinson, Comic Neue, or OpenDyslexic easier to read."
+          onReset={() => reset("fontFamily")}
+          isDefault={isDefault("fontFamily")}
+        >
+          <div role="radiogroup" aria-label="Font" className="flex flex-wrap gap-1.5">
             {(Object.keys(FONT_OPTIONS) as Preferences["fontFamily"][]).map((id) => (
               <button
                 key={id}
@@ -86,10 +97,11 @@ export function AppearanceFields({ value, onChange, fields = ALL_FIELDS }: Appea
                 role="radio"
                 aria-checked={value.fontFamily === id}
                 onClick={() => onChange({ fontFamily: id })}
-                className={`rounded-xl border-2 px-3 py-2 text-left ${value.fontFamily === id ? "border-primary" : "border-border"}`}
+                className={`inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-full border-2 px-2.5 text-sm ${value.fontFamily === id ? "border-primary font-semibold" : "border-border"}`}
                 style={{ fontFamily: FONT_OPTIONS[id].stack }}
               >
                 {FONT_OPTIONS[id].label}
+                <SelectedMark selected={value.fontFamily === id} />
               </button>
             ))}
           </div>
@@ -134,6 +146,17 @@ export function AppearanceFields({ value, onChange, fields = ALL_FIELDS }: Appea
         </SettingRow>
       ) : null}
 
+      {show("wordSpacing") ? (
+        <SettingRow label="Word spacing" onReset={() => reset("wordSpacing")} isDefault={isDefault("wordSpacing")}>
+          <Segmented
+            label="Word spacing"
+            value={String(value.wordSpacing)}
+            options={[["0", "Normal"], ["0.1", "A little wider"], ["0.2", "Wider"]]}
+            onChange={(next) => onChange({ wordSpacing: Number(next) })}
+          />
+        </SettingRow>
+      ) : null}
+
       {show("density") ? (
         <SettingRow label="Information density" onReset={() => reset("density")} isDefault={isDefault("density")}>
           <Segmented
@@ -168,7 +191,18 @@ export function AppearanceFields({ value, onChange, fields = ALL_FIELDS }: Appea
   );
 }
 
-function SettingRow({ label, children, onReset, isDefault }: { label: string; children: ReactNode; onReset: () => void; isDefault: boolean }) {
+// Selection is shown with a check mark as well as the colored border.
+function SelectedMark({ selected }: { selected: boolean }) {
+  if (!selected) return null;
+  return (
+    <>
+      <Check size={18} strokeWidth={3} aria-hidden="true" className="shrink-0 text-primary" />
+      <span className="sr-only">(selected)</span>
+    </>
+  );
+}
+
+function SettingRow({ label, hint, children, onReset, isDefault }: { label: string; hint?: string; children: ReactNode; onReset: () => void; isDefault: boolean }) {
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -179,6 +213,7 @@ function SettingRow({ label, children, onReset, isDefault }: { label: string; ch
           </button>
         ) : null}
       </div>
+      {hint ? <p className="mc-hint mb-2">{hint}</p> : null}
       {children}
     </div>
   );
@@ -194,38 +229,41 @@ export function Segmented({ label, value, options, onChange }: { label: string; 
           role="radio"
           aria-checked={value === optionValue}
           onClick={() => onChange(optionValue)}
-          className={`min-h-11 rounded-xl border-2 px-3 ${value === optionValue ? "border-primary bg-primary-soft font-semibold" : "border-border"}`}
+          className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border-2 px-3 ${value === optionValue ? "border-primary bg-primary-soft font-semibold" : "border-border"}`}
         >
           {optionLabel}
+          <SelectedMark selected={value === optionValue} />
         </button>
       ))}
     </div>
   );
 }
 
-// Same sample content everywhere, so changes are easy to compare.
+// Same sample content everywhere, so changes are easy to compare. The frame and
+// neutral labels make clear this is a sample; `inert` removes it from clicks and
+// keyboard focus, so nothing here can be mistaken for a real task or action.
 export function AppearancePreview() {
   return (
-    <div aria-label="Preview" role="group" className="mc-card flex flex-col gap-3 p-[var(--space)]">
-      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">Preview</p>
-      <h3 className="text-lg font-bold">Prepare the team update</h3>
-      <p>Collect three highlights from this week and write two short sentences about each.</p>
-      <div className="flex flex-wrap gap-1.5">
-        <span className="mc-chip">In progress</span>
-        <span className="mc-chip">Due Fri 8 Nov</span>
-      </div>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" className="h-5 w-5" defaultChecked readOnly tabIndex={-1} aria-hidden="true" />
-        <span>Open last week&apos;s notes</span>
-      </label>
-      <div className="self-start rounded-2xl border border-border bg-background px-3 py-2">Would you like to split this into smaller steps?</div>
-      <div className="flex gap-2">
-        <span className="mc-btn mc-btn-primary mc-btn-sm" aria-hidden="true">
-          Apply
-        </span>
-        <span className="mc-btn mc-btn-secondary mc-btn-sm" aria-hidden="true">
-          Edit
-        </span>
+    <div role="group" aria-labelledby="appearance-preview-title" className="rounded-2xl border-2 border-dashed border-border-strong bg-surface-muted p-3">
+      <p id="appearance-preview-title" className="mb-3 flex items-center gap-2 font-bold">
+        <Eye size={18} aria-hidden="true" /> Preview only
+      </p>
+      <div inert className="mc-card flex cursor-default select-none flex-col gap-3 p-[var(--space)]">
+        <h3 className="text-lg font-bold">Sample heading</h3>
+        <p>This is how text will look across MindCraft.</p>
+        <div className="flex flex-wrap gap-1.5">
+          <span className="mc-chip">Sample label</span>
+          <span className="mc-chip">Sample date</span>
+        </div>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" className="h-5 w-5" defaultChecked />
+          <span>Sample checklist item</span>
+        </label>
+        <div className="self-start rounded-2xl border border-border bg-background px-3 py-2">Sample assistant message</div>
+        <div className="flex flex-wrap gap-2">
+          <span className="mc-btn mc-btn-primary mc-btn-sm">Main button</span>
+          <span className="mc-btn mc-btn-secondary mc-btn-sm">Other button</span>
+        </div>
       </div>
     </div>
   );

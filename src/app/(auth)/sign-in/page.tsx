@@ -38,7 +38,7 @@ export default function SignInPage() {
   }
 
   return (
-    <AuthShell title="Sign in" intro="Welcome back. Your workspace is where you left it." footer={<DemoEntry />}>
+    <AuthShell title="Sign in" footer={<DemoEntry />}>
       {isSupabaseConfigured ? (
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
           {error ? <FormMessage tone="error">{error}</FormMessage> : null}

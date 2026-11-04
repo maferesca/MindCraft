@@ -1,10 +1,10 @@
-# Mindcraft
+# MindCraft
 
-Mindcraft is a personal workspace you build yourself. It gives you tasks, a calendar, notes, a timer, and practical help starting work. You choose which tools appear, how they look, and how you use them.
+MindCraft is a personal workspace you build yourself. It gives you tasks, a calendar, notes, a timer, and practical help starting work. You choose which tools appear, how they look, and how you use them.
 
 The name joins "mind" and "craft". Creative Mode borrows the open-ended building feel of sandbox games, including a bottom inventory. All visuals, icons, and assets are original.
 
-This project was built for a two-week hackathon with Specialisterne. Mindcraft is not clinically validated. We do not claim it suits all neurodivergent people or that it improves productivity. Those are open questions to test with users.
+This project was built for a two-week hackathon with Specialisterne. MindCraft is not clinically validated. We do not claim it suits all neurodivergent people or that it improves productivity. Those are open questions to test with users.
 
 ---
 
@@ -31,8 +31,8 @@ Then open http://localhost:3000.
 ### Connecting Supabase (real accounts)
 
 1. Create a project at https://supabase.com.
-2. Apply the migration. Either:
-   - paste `supabase/migrations/20261102000000_initial_schema.sql` into the SQL editor and run it, or
+2. Apply both migrations, in order. Either:
+   - paste each file from `supabase/migrations/` into the SQL editor and run it, oldest first, or
    - use the Supabase CLI: `supabase link` then `supabase db push`.
 3. In **Authentication > URL Configuration**:
    - set **Site URL** to your app URL (for example `http://localhost:3000`)
@@ -79,8 +79,8 @@ src/proxy.ts: refreshes the session cookie and redirects signed-out visitors
 - **Privileged work stays on the server.** Gemini calls happen only in route handlers. Each handler checks the caller's session with `getClaims()`, rate-limits the request, and validates input with Zod. The Gemini key is never sent to the browser, and the Supabase service-role key is never used.
 - **Blocks are views and records are shared.** `workspace_blocks` stores only presentation: block type, display options, grid positions per breakpoint, phone order, and hidden state. Tasks, steps, notes, and events live in their own tables. Every block reads from the same in-memory store, so a change in one block shows up everywhere straight away. Removing a block never deletes content.
 - **Creative Mode edits a draft.** Entering Creative Mode snapshots the block list. Undo and Redo work on a history of drafts. **Save** writes only the difference. **Cancel** discards the draft. Task edits made during the session are not part of the draft, so they survive Cancel.
-- **Layouts per breakpoint.** Desktop uses a 12-column grid, tablet uses 6 columns, and phones use a single column. If a breakpoint has no saved layout, Mindcraft builds one from the desktop reading order (top to bottom, then left to right). Reordering on a phone saves `mobile_order` and never changes desktop positions.
-- **AI proposals are never actions.** The model returns `{ reply, question?, proposals[] }`. The server checks each proposal against a strict Zod union of the six allowed types and drops unknown task ids. It also removes deadlines and priorities unless the user's own words mention them. The browser validates the result again, and validates once more before Apply. Mindcraft never runs model-generated code, queries, or arbitrary mutations.
+- **Layouts per breakpoint.** Desktop uses a 12-column grid, tablet uses 6 columns, and phones use a single column. If a breakpoint has no saved layout, MindCraft builds one from the desktop reading order (top to bottom, then left to right). Reordering on a phone saves `mobile_order` and never changes desktop positions.
+- **AI proposals are never actions.** The model returns `{ reply, question?, proposals[] }`. The server checks each proposal against a strict Zod union of the six allowed types and drops unknown task ids. It also removes deadlines and priorities unless the user's own words mention them. The browser validates the result again, and validates once more before Apply. MindCraft never runs model-generated code, queries, or arbitrary mutations.
 - **One assistant.** The chat panel, Plan my day, Help me start, and Missing information all use the same endpoint, rules, and saved conversation. Each request sends only the context it needs (see "What is sent to the AI").
 - **Model configuration lives in one place.** `src/lib/ai/server-env.ts` reads `GEMINI_MODEL`, with a default of `gemini-3.8-flash`. Check current model IDs at https://ai.google.dev/gemini-api/docs/models.
 
@@ -90,7 +90,7 @@ src/proxy.ts: refreshes the session cookie and redirects signed-out visitors
 | --- | --- |
 | `supabase/migrations/` | Schema, RLS policies, triggers, streak function |
 | `src/app/` | Routes: auth pages, `/welcome` (setup), `/workspace`, API route handlers, manifest, icons |
-| `src/components/blocks/` | Task list, Calendar, Next step, Timer, Notes |
+| `src/components/blocks/` | Tasks, Calendar, Task guide, Focus timer, Notes, Resources, Check-in |
 | `src/components/workspace/` | Grid, block frame, Creative Mode, inventory, empty state, search |
 | `src/components/assistant/`, `planning/` | Assistant panel, proposals, voice recorder, Plan my day, daily welcome card |
 | `src/components/providers/` | Data store, screen state, shared timer |
@@ -105,7 +105,7 @@ The assistant receives only these items:
 - the selected task (title, description, expected result, deadline, priority, status, steps)
 - titles, status, and deadlines of other open tasks
 - the block types in the workspace
-- three preferences: response detail, language, and planning style
+- preferences: response detail, language, planning style, focus time, focus length, and what helps the person get started
 - choices the user has stated, such as "no timer"
 
 Notes, calendar events, email, and other settings are never sent. A voice recording is sent once for transcription and is not stored. The same explanation appears in **Settings > AI and privacy**.
@@ -117,22 +117,24 @@ Notes, calendar events, email, and other settings are never sent. A voice record
 ### Implemented
 
 - Sign up, sign in, email confirmation (when enabled in Supabase), password recovery, and sign out, with loading, validation, and error states. Supabase Auth handles all passwords.
-- Short, skippable setup with a live preview: name, theme and accent, font, text size, line spacing, density, motion, preferred tools, and reminders. Includes **Use defaults** and **Set this up later**.
+- Short setup with a live preview. The display name is required; theme and accent, font, text size, line spacing, density, how the person likes to work, preferred tools, and reminders can be skipped with **Use defaults** or **Set this up later**.
 - New accounts start with an empty workspace showing "Your space, your way." and the actions Build my space, Help me choose, and Plan my day. A starter layout appears only as a preview and is added only after confirmation.
 - Compact header with profile menu (Profile, Appearance and reading, Workspace preferences, Notifications, AI and privacy, Account, Sign out), workspace name, an optional streak, and three modes. There is no sidebar.
-- **Creative Mode:** bottom inventory (one row on desktop with overflow arrows, a bottom sheet on phones), drag from the inventory or press to add, header-only drag handles, resizing with minimum sizes, snap grid, Save, Cancel, Undo, Redo (also Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y), hide or remove with an explanation, and non-drag controls (Move earlier or later, size presets, move left, right, up, or down).
+- **Creative Mode:** compact toolbar with numbered slots, plus an inventory panel organized into Planning, Focus, and Support. Drag from either one or click to add. Arrow keys, Enter, and number keys work in the toolbar. Also includes header-only drag handles, resizing with minimum sizes, snap grid, Save, Cancel, Undo, Redo (also Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y), hide or remove with an explanation, and non-drag controls (Move earlier or later, size presets, move left, right, up, or down).
 - **Blocks:**
-  - **Task List:** quick add, full editor, status, filters, compact or expanded view, delete with Undo, Help me start, and Missing information with an editable draft message to copy.
-  - **Calendar:** day, week, and month views. Internal events and work sessions, deadlines shown separately from scheduled sessions, events linkable to tasks. It is labelled as the Mindcraft calendar.
-  - **Next step:** one action at a time; edit, replace, complete, Make this smaller, or I'm blocked. Works without AI. Completing a step never completes the task.
-  - **Timer:** Pomodoro preset or custom length. Start, pause, resume, reset, and end, with an optional break. Sound is off by default, and motion respects your settings.
-  - **Notes:** quick capture, optional title, autosave, task links, and delete with Undo.
+  - **Tasks:** list or board, status dropdown and drag between columns, All, Today, Upcoming, Overdue, and Completed filters, and sorting by deadline, priority, or title. The board's All filter also shows done tasks, so its Done column works.
+  - **Calendar:** month, week, and day views plus an agenda, using the profile timezone. Date-only deadlines appear all day and timed deadlines at their time. Events and work sessions are edited separately from deadlines, which change only through **Edit deadline** in task details.
+  - **Task guide:** task details, ordered steps in One step or All steps view, a separate "Before submitting" checklist, linked resources, and **Mark task done**. Neither checklist completes a task.
+  - **Focus timer:** countdown or stopwatch based on timestamps, so a session survives a refresh. Optional break and sound. One shared session is used by every timer block and Focus Mode.
+  - **Notes:** plain text, bullets, and checklists, pinning, autosave status, and links to one task or project.
+  - **Resources:** saved links with list or card views, favorites, and filters.
+  - **Check-in:** progress updates and help requests saved as private drafts. Help requests have Open, Waiting, and Resolved statuses and follow-ups.
 - Focus Mode: selected task, expected result, current step, resources (source link and linked notes), an optional timer, Help me start, and I'm blocked. Leaving it restores the saved workspace untouched.
 - Assistant panel (side panel on desktop, full screen on phones) with proposals you can Apply, Edit, or Dismiss. Errors offer Retry, and your text is kept.
 - Daily welcome card (once per local day, dismissible) with text, voice, and four quick choices. Plan my day covers text and voice with an editable transcript.
 - Voice capture: the microphone is requested only after you press Record. The recorder shows recording, stop, cancel, and processing states. Recordings are limited to 2 minutes and 5 MB, and the server checks the file type. Typing always works as an alternative.
-- Six complete themes (Warm Studio, Clear, Rose, Colorful, Monochrome, Dark) and five accents. Each has a light and a dark variant.
-- Reading preferences: font, text size, line spacing, letter spacing, and density. These apply everywhere, including dialogs and chat. Each setting has **Reset**, and there is **Restore appearance defaults**.
+- Seventeen complete themes (Warm Studio, Clear Blue, Rose Clay, Sage Garden, Lavender Mist, Ocean Breeze, Colorful, Monochrome, Midnight, Dark Cocoa, Sunset Pop, Tropical Splash, Neon Night, Quiet Paper, Quiet Night, Blue & Orange, Blue & Orange Dark) and five accents. Sunset Pop, Tropical Splash, and Neon Night are multicolor and tint each block header. Quiet Paper and Quiet Night each stay within a single hue. Blue & Orange and its dark version use a color pair that stays distinct for most types of color blindness. Status and selection are shown with words or symbols as well as color. Each accent has a light and a dark variant.
+- Reading preferences: font (System default, Arial, Verdana, Open Sans, Lexend, Atkinson Hyperlegible, Comic Neue, OpenDyslexic), text size, line spacing, letter spacing, word spacing, and density. Some people find the reading fonts easier to use, but they are options to try: MindCraft does not claim that any font treats dyslexia. These apply everywhere, including dialogs and chat. Each setting has **Reset**, and there is **Restore appearance defaults**.
 - Optional streak: one visit per local day, using the saved timezone. Current and best streaks are stored and the streak can be hidden. There are no penalties.
 - In-app reminders: Off, Friendly, Playful, or Minimal, with quiet hours, a preferred time, an inactivity threshold, snooze, and turn off.
 - PWA: manifest, generated icons, and a service worker that caches the app shell and serves an offline page. An offline banner appears, and unsent chat and planning text is kept on the device.
@@ -144,13 +146,16 @@ Notes, calendar events, email, and other settings are never sent. A voice record
 - Offline editing and sync. Edits made while offline are not queued.
 - Using AI to interpret free-form setup answers. The assistant can suggest preference changes in chat, but the setup screen does not use AI.
 - Self-service account deletion. This needs a privileged server function.
-- Daily Schedule, Upcoming, routines with recurrence, and a streak block.
+- Daily Schedule, Upcoming, routines with recurrence, a streak block, and a Timeline view.
 - Calendar sync with Google or Outlook.
+- Sharing Check-in entries. There are no team members, managers, or a team view yet, so Share stays disabled and entries remain private drafts.
+- File uploads in Resources. There is no file storage, so only links can be added.
+- Dragging work sessions on the calendar. Sessions move through their edit form.
 - A shared rate limiter across server instances. The current limiter is in memory and protects only a single instance.
 
 ### Simulated or limited
 
-- **Reminders are in-app only.** They appear while Mindcraft is open, either when you return after the inactivity period or at the preferred time. Nothing is sent while the app is closed.
+- **Reminders are in-app only.** They appear while MindCraft is open, either when you return after the inactivity period or at the preferred time. Nothing is sent while the app is closed.
 - **Local demo mode** stores fictional data in `localStorage`. It is a convenience for exploring the app, not a real account. Its streak logic mirrors the SQL function.
 - The service worker does not make the app usable offline. It shows an offline page and caches static assets.
 
@@ -158,16 +163,16 @@ Notes, calendar events, email, and other settings are never sent. A voice record
 
 ## Validation results
 
-Run on 2026-11-02:
+Run on 2026-11-02, with theme checks updated on 2026-11-03:
 
 | Check | Result |
 | --- | --- |
 | TypeScript (`tsc --noEmit`) | Passed, 0 errors |
 | ESLint | Passed, 0 problems |
 | Production build (`next build`) | Passed |
-| Unit tests (Vitest) | 13 of 13 passed |
-| RLS isolation (PGlite, two accounts) | 20 of 20 checks passed |
-| Theme contrast (6 themes × 6 accents) | All text pairs ≥ 4.5:1 and all control borders and focus indicators ≥ 3:1 |
+| Unit tests (Vitest) | 36 of 36 passed |
+| RLS isolation (PGlite, two accounts) | 36 of 36 checks passed |
+| Theme contrast (17 themes × 6 accent options) | All text pairs ≥ 4.5:1 and all control borders and focus indicators ≥ 3:1, also under simulated protanopia, deuteranopia, and tritanopia |
 
 **Manual browser walkthrough (local demo, desktop 1366×860 and phone 375×812):** setup with live theme preview; empty workspace; adding blocks by pressing (no dragging); header drag; Undo, Redo, and Cancel restoring positions; Save surviving a reload; marking a step done without completing the task; completing a task updating Task List, Next step, and the calendar deadline; Focus Mode exit leaving the layout unchanged; removing the Task List block keeping all tasks; AI failure keeping the draft and changing no data; phone view in the desktop reading order with no horizontal scrolling; phone reordering through the bottom sheet; API returning 401 when signed out and 403 for the demo without opt-in.
 
@@ -184,7 +189,7 @@ Following WCAG 2.2 AA practices is a goal, not a certification.
 
 | # | Check | How it is covered |
 | --- | --- | --- |
-| 1 | Skip setup and reach an empty workspace | "Set this up later" plus the new-user trigger, which creates no blocks (RLS test) |
+| 1 | Skip setup and reach an empty workspace | After the required name, "Set this up later" plus the new-user trigger, which creates no blocks (RLS test) |
 | 2 | Suggested blocks need confirmation | Starter layout is preview-only; proposals need Apply |
 | 3 | Add a block without dragging | Inventory buttons and tap-to-add (walkthrough) |
 | 4 | Layout and preferences persist | Saved to the database or demo storage; reload checked |
