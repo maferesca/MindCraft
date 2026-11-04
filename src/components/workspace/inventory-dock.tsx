@@ -54,6 +54,10 @@ export function InventoryDock({ phone, hiddenBlocks, draggingType, onAdd, onRest
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape" && inventoryOpen) {
+      closeInventory();
+      return;
+    }
     const slot = Number(event.key);
     if (slot >= 1 && slot <= BLOCK_ORDER.length) {
       const type = BLOCK_ORDER[slot - 1];

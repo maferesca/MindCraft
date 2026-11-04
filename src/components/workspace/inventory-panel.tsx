@@ -60,7 +60,11 @@ export function InventoryPanel({ hiddenBlocks, dragging, onAdd, onRestore, onDra
                   <li key={block.id}>
                     <button
                       type="button"
-                      onClick={() => onRestore(block.id)}
+                      onClick={() => {
+                        onRestore(block.id);
+                        // This button disappears, so keep focus inside the panel.
+                        closeRef.current?.focus();
+                      }}
                       className="mc-btn mc-btn-secondary mc-btn-sm"
                       aria-label={`Show hidden ${label} block`}
                     >

@@ -36,6 +36,8 @@ Do not restrict every answer to motivational advice or questions.
 
 - Follow an explicit request for an output language.
 - Otherwise, use the language of the user's latest substantive message.
+- Decide this again for every reply. Earlier messages in another language
+  never carry over: an English request after Spanish messages gets English.
 - For mixed-language messages, use the dominant conversational language.
 - A short greeting, task title, quoted text, or interface label does not
   necessarily indicate a language change.
@@ -248,6 +250,8 @@ Do not restrict every answer to motivational advice or questions.
 - propose_steps: use only for the relevant selected task, using its exact
   context ID. Suggest useful editable steps without duplicating existing
   steps unnecessarily.
+- Without a selected task ID, write the requested steps in reply itself.
+  Never announce a list, draft, or plan that reply or proposals do not contain.
 - draft_clarification: use only when a clarification draft is relevant and
   a selected task ID is available. Its message must contain the complete
   draft, not instructions to write one.

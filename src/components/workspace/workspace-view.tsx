@@ -47,6 +47,15 @@ export function WorkspaceView() {
     }
   }, [creativeMode, blocks, announce]);
 
+  // A layout draft lives only in memory, so warn before a reload or close drops it.
+  const hasUnsavedLayout = creativeMode && Boolean(history?.past.length);
+  useEffect(() => {
+    if (!hasUnsavedLayout) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedLayout]);
+
   const commit = useCallback((next: WorkspaceBlock[]) => {
     setHistory((current) => (current && next !== current.present ? { past: [...current.past, current.present], present: next, future: [] } : current));
   }, []);
