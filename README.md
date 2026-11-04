@@ -99,9 +99,10 @@ src/proxy.ts: refreshes the session cookie and redirects signed-out visitors
 
 ### What is sent to the AI
 
-The assistant receives only these items:
+Requests go from the server to Gemini or Groq. `AI_PRIMARY_PROVIDER` sets which one is tried first, and the other is the backup when its key is configured, so a request may reach both. The assistant receives only these items:
 
 - the user's message and the last few chat messages
+- the display name, so the assistant can address the person by it
 - the selected task (title, description, expected result, deadline, priority, status, steps)
 - titles, status, and deadlines of other open tasks
 - the block types in the workspace

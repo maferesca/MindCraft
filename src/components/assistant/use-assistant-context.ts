@@ -11,7 +11,7 @@ import { useWorkspaceData } from "../providers/workspace-data";
 // titles for comparison, visible block types, a few preferences, and stated
 // choices. It never sends notes, events, or the whole account.
 export function useAssistantContext() {
-  const { tasks, steps, blocks, preferences, messages } = useWorkspaceData();
+  const { profile, tasks, steps, blocks, preferences, messages } = useWorkspaceData();
   const today = useToday();
 
   return useCallback(
@@ -20,6 +20,7 @@ export function useAssistantContext() {
       const userTexts = [...messages.filter((message) => message.role === "user").map((message) => message.content), ...extraUserText];
       return {
         mode,
+        displayName: profile?.display_name?.trim() || null,
         today,
         task: task
           ? {
@@ -50,6 +51,6 @@ export function useAssistantContext() {
         missingInformation,
       };
     },
-    [tasks, steps, blocks, preferences, messages, today],
+    [profile, tasks, steps, blocks, preferences, messages, today],
   );
 }

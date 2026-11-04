@@ -292,10 +292,12 @@ function AiSection() {
       <section className="rounded-xl border border-border p-4">
         <h3 className="font-bold">What is sent to the AI provider</h3>
         <p className="mt-1">
-          The assistant uses Google&apos;s Gemini API, called from the MindCraft server. When you ask for help, MindCraft sends only:
+          The assistant uses Google&apos;s Gemini API or Groq, called from the MindCraft server. One is the main provider, and the other can answer if it
+          is unavailable, so a request may reach both. When you ask for help, MindCraft sends only:
         </p>
         <ul className="mt-2 list-disc pl-5">
           <li>your message and the last few messages of this chat</li>
+          <li>your display name, so the assistant can call you by it</li>
           <li>the selected task (title, description, expected result, deadline, priority, status, steps)</li>
           <li>the titles, status, and deadlines of your other open tasks</li>
           <li>which block types are in your workspace</li>

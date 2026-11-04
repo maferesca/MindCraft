@@ -62,7 +62,7 @@ export function AssistantButton() {
 // One contextual assistant shared by chat, Daily Planning, Help me start,
 // and Missing information, with a single saved conversation.
 export function AssistantPanel() {
-  const { messages, tasks, appendMessage, clearChat } = useWorkspaceData();
+  const { messages, profile, tasks, appendMessage, clearChat } = useWorkspaceData();
   const { assistantOpen, assistantRequest, consumeAssistantRequest, closeAssistant, openSettings } = useWorkspaceUI();
   const buildContext = useAssistantContext();
   const [input, setInput] = useLocalDraft("assistant");
@@ -84,6 +84,7 @@ export function AssistantPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const task = taskId ? tasks.find((item) => item.id === taskId) : null;
+  const name = profile?.display_name?.trim();
 
   async function send(text: string, sendMode: AssistantMode = mode, sendTaskId: string | null = taskId) {
     const content = text.trim();
@@ -231,7 +232,7 @@ export function AssistantPanel() {
 
       <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-3" aria-live="polite" aria-relevant="additions">
         {messages.length === 0 && !pending ? (
-          <p className="mc-hint">Ask for help planning or getting started.</p>
+          <p className="mc-hint">{name ? `Hi ${name}. ` : ""}Ask for help planning or getting started.</p>
         ) : null}
         <ol className="flex flex-col gap-3">
           {messages.map((message) => (

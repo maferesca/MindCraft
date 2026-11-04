@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildContextText } from "../ai/assistant-prompt";
 import { sanitizeProposals, stripInlineMarkdown } from "../ai/proposal-guard";
 import { detectDeclines } from "../ai/client";
 import { CATALOG_ITEMS } from "../block-catalog";
@@ -138,6 +139,16 @@ describe("assistant declines (acceptance check 9)", () => {
 describe("assistant reply text", () => {
   it("removes inline Markdown markers and keeps lists", () => {
     expect(stripInlineMarkdown("1. **[QA] Task** – vence __hoy__ en `main`\n2. * dos * tres")).toBe("1. [QA] Task – vence hoy en main\n2. * dos * tres");
+  });
+});
+
+describe("assistant display name", () => {
+  it("sends the name as data and asks for it only in the first reply", () => {
+    const context: AssistantContext = { mode: "chat", displayName: 'Ana "QA"' };
+    expect(buildContextText(context, true)).toContain('"Ana \\"QA\\""');
+    expect(buildContextText(context, true)).toContain("first message");
+    expect(buildContextText(context)).not.toContain("first message");
+    expect(buildContextText({ mode: "chat" }, true)).not.toContain("first message");
   });
 });
 

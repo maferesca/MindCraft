@@ -160,6 +160,7 @@ export type AssistantResult = z.infer<typeof assistantResultSchema>;
 
 export const assistantContextSchema = z.object({
   mode: z.enum(["chat", "help_me_start", "planning", "missing_information", "onboarding"]),
+  displayName: z.string().trim().max(60).nullable().optional(),
   task: z
     .object({
       id: z.string().uuid(),

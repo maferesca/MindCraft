@@ -3,6 +3,7 @@
 import { DropdownMenu, Popover } from "radix-ui";
 import { Bell, Blocks, CalendarCheck, Flame, Focus, LogOut, Palette, Shield, SlidersHorizontal, User, UserCog } from "lucide-react";
 import { BrandMark, Wordmark } from "../brand/brand-mark";
+import { TeamCredit } from "../brand/team-credit";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI, type SettingsSection } from "../providers/workspace-ui";
 
@@ -49,6 +50,10 @@ export function AppHeader() {
               <DropdownMenu.Item className="mc-menu-item" onSelect={() => signOut()}>
                 <LogOut size={16} aria-hidden="true" /> {mode === "demo" ? "Leave demo" : "Sign out"}
               </DropdownMenu.Item>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DropdownMenu.Label className="px-2 py-1">
+                <TeamCredit />
+              </DropdownMenu.Label>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Wordmark } from "../brand/brand-mark";
+import { TeamCredit } from "../brand/team-credit";
 
 export function AuthShell({ title, intro, children, footer }: { title: string; intro?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
@@ -14,6 +15,7 @@ export function AuthShell({ title, intro, children, footer }: { title: string; i
         <div className="mt-6">{children}</div>
       </main>
       {footer ? <div className="mt-6 max-w-md text-center">{footer}</div> : null}
+      <TeamCredit decorated className="mt-8" />
     </div>
   );
 }
