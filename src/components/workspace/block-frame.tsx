@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { BLOCK_DEFINITIONS } from "@/lib/blocks";
 import { SIZE_LABELS, currentSizePreset, type SizePreset } from "@/lib/layout-edit";
 import type { Breakpoint, WorkspaceBlock } from "@/lib/types";
-import { BlockIcon } from "../blocks/block-icon";
+import { BlockIcon, blockHeaderBackground } from "../blocks/block-icon";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { IconButton } from "../ui/icon-button";
 
@@ -40,7 +40,10 @@ export function BlockFrame({ block, breakpoint, creative, children }: BlockFrame
       aria-labelledby={headingId}
       className={`mc-card flex h-full min-h-0 flex-col overflow-hidden ${creative ? "outline-2 outline-dashed outline-offset-2 outline-border-strong" : ""}`}
     >
-      <header className={`flex items-center gap-2 border-b border-border px-3 py-1.5 ${creative ? "bg-surface-muted" : ""}`}>
+      <header
+        className={`flex items-center gap-2 border-b border-border px-3 py-1.5 ${creative ? "bg-surface-muted" : ""}`}
+        style={creative ? undefined : { background: blockHeaderBackground(block.block_type) }}
+      >
         {creative && breakpoint !== "sm" ? (
           <span
             className="mc-drag-handle -ml-1 inline-flex h-9 w-7 cursor-grab items-center justify-center rounded-md text-text-muted hover:bg-background active:cursor-grabbing"

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { resolveTokens, type AccentId, type ThemeId } from "./themes";
+import { THEMES, THEME_IDS, resolveTokens, type AccentId, type ThemeId } from "./themes";
 
 export const BLOCK_TYPES = ["task_list", "calendar", "next_step", "focus_timer", "notes"] as const;
 
@@ -8,15 +8,20 @@ export const FONT_OPTIONS = {
   arial: { label: "Arial", stack: "Arial, Helvetica, sans-serif" },
   verdana: { label: "Verdana", stack: "Verdana, Geneva, sans-serif" },
   "open-sans": { label: "Open Sans", stack: 'var(--font-open-sans), "Open Sans", Arial, sans-serif' },
+  lexend: { label: "Lexend", stack: "var(--font-lexend), Verdana, sans-serif" },
+  atkinson: { label: "Atkinson Hyperlegible", stack: "var(--font-atkinson), Verdana, sans-serif" },
+  "comic-neue": { label: "Comic Neue", stack: 'var(--font-comic-neue), "Comic Sans MS", sans-serif' },
+  opendyslexic: { label: "OpenDyslexic", stack: "var(--font-opendyslexic), Verdana, sans-serif" },
 } as const;
 
 export const preferencesSchema = z.object({
-  theme: z.enum(["warm-studio", "clear", "rose", "colorful", "monochrome", "dark"]),
+  theme: z.enum(THEME_IDS),
   accent: z.enum(["theme", "terracotta", "sage", "ocean", "plum", "graphite"]),
-  fontFamily: z.enum(["system", "arial", "verdana", "open-sans"]),
+  fontFamily: z.enum(["system", "arial", "verdana", "open-sans", "lexend", "atkinson", "comic-neue", "opendyslexic"]),
   textSize: z.number().int().min(14).max(24),
   lineHeight: z.number().min(1.3).max(2.2),
   letterSpacing: z.number().min(0).max(0.08),
+  wordSpacing: z.number().min(0).max(0.3),
   density: z.enum(["compact", "comfortable", "spacious"]),
   reducedMotion: z.enum(["system", "on", "off"]),
   sounds: z.boolean(),
@@ -39,6 +44,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   textSize: 16,
   lineHeight: 1.6,
   letterSpacing: 0,
+  wordSpacing: 0,
   density: "comfortable",
   reducedMotion: "system",
   sounds: false,
@@ -79,6 +85,7 @@ export function preferenceStyleVariables(preferences: Preferences): Record<strin
     "--text-base": `${preferences.textSize}px`,
     "--line-height": String(preferences.lineHeight),
     "--letter-spacing": `${preferences.letterSpacing}em`,
+    "--word-spacing": `${preferences.wordSpacing}em`,
     "--density": String(DENSITY_SCALE[preferences.density]),
   };
   for (const [name, value] of Object.entries(tokens)) {
@@ -94,7 +101,7 @@ export function applyPreferencesToDocument(preferences: Preferences) {
   }
   root.dataset.theme = preferences.theme;
   root.dataset.motion = preferences.reducedMotion;
-  root.style.colorScheme = preferences.theme === "dark" ? "dark" : "light";
+  root.style.colorScheme = THEMES[preferences.theme].dark ? "dark" : "light";
   // Font size on <html> scales every rem-based size, including dialogs and chat.
   root.style.fontSize = `${preferences.textSize}px`;
 }
@@ -106,6 +113,7 @@ export const PREFERENCE_LABELS: Partial<Record<keyof Preferences, string>> = {
   textSize: "Text size",
   lineHeight: "Line spacing",
   letterSpacing: "Letter spacing",
+  wordSpacing: "Word spacing",
   density: "Information density",
   reducedMotion: "Motion",
   sounds: "Sounds",

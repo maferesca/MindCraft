@@ -87,7 +87,7 @@ export function MissingInfoDialog() {
         <div className="mt-4">
           <TextAreaField
             label="Your message"
-            hint="Edit it as you like. Mindcraft does not send messages; copy it into your usual channel."
+            hint="Mindcraft won't send this. Copy it into your usual channel."
             rows={5}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}

@@ -66,7 +66,7 @@ export function PlanningDialog() {
   }
 
   return (
-    <Modal open={planningOpen} onOpenChange={(open) => !open && close()} title="Plan my day" description="Describe what's on your mind. You'll review every suggestion before anything changes." wide>
+    <Modal open={planningOpen} onOpenChange={(open) => !open && close()} title="Plan my day" wide>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <label htmlFor="planning-text" className="mc-label">
           What do you have in mind today?
@@ -102,7 +102,7 @@ export function PlanningDialog() {
       {error ? (
         <div className="mt-4 rounded-xl border-2 border-danger p-3" role="alert">
           <p className="font-semibold text-danger">{error}</p>
-          <p className="mc-hint">Your text is kept above. You can try again, or add tasks manually.</p>
+          <p className="mc-hint">Your text is kept above.</p>
           <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={() => submit(text)}>
             <RotateCcw size={14} aria-hidden="true" /> Try again
           </button>

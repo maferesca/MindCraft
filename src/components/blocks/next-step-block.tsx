@@ -37,7 +37,7 @@ export function NextStepBlock({ block }: { block: WorkspaceBlock }) {
           {task && task.status === "done" ? <option value={task.id}>{task.title} (done)</option> : null}
         </select>
       </div>
-      {task ? <CurrentStep task={task} /> : <p className="mc-hint">{candidates.length ? "Pick a task to see one action at a time." : "Add a task first, then pick it here."}</p>}
+      {task ? <CurrentStep task={task} /> : candidates.length ? null : <p className="mc-hint">Add a task first.</p>}
     </div>
   );
 }

@@ -66,7 +66,7 @@ export function CalendarBlock({ block }: { block: WorkspaceBlock }) {
 
   return (
     <div className="flex h-full flex-col gap-2">
-      <p className="mc-hint -mt-1">Mindcraft calendar · not synced with other calendars</p>
+      <p className="mc-hint -mt-1">Mindcraft calendar · not synced</p>
       <div className="flex flex-wrap items-center gap-2">
         <div role="group" aria-label="Calendar view" className="inline-flex rounded-lg border border-border-strong p-0.5">
           {(["day", "week", "month"] as View[]).map((option) => (
@@ -115,12 +115,12 @@ export function CalendarBlock({ block }: { block: WorkspaceBlock }) {
                   setAnchor(date);
                   updateBlockConfig(block.id, { view: "day" });
                 }}
-                aria-label={`${format(date, "EEEE d MMMM")}: ${dayEvents.length} events, ${deadlines.length} deadlines`}
+                aria-label={`${key === today ? "Today, " : ""}${format(date, "EEEE d MMMM")}: ${dayEvents.length} events, ${deadlines.length} deadlines`}
                 className={`flex min-h-12 flex-col items-start rounded-md border p-1 text-left ${
                   key === today ? "border-2 border-primary" : "border-border"
                 } ${isSameMonth(date, anchor) ? "" : "text-text-muted"}`}
               >
-                <span className="font-semibold">{format(date, "d")}</span>
+                <span className={`font-semibold ${key === today ? "underline underline-offset-2" : ""}`}>{format(date, "d")}</span>
                 {count ? <span className="text-xs">{count} item{count > 1 ? "s" : ""}</span> : null}
               </button>
             );
@@ -140,7 +140,7 @@ export function CalendarBlock({ block }: { block: WorkspaceBlock }) {
                   </h5>
                 ) : null}
                 {dayEvents.length + deadlines.length === 0 ? (
-                  <p className="mc-hint text-sm">Nothing planned.</p>
+                  view === "day" ? <p className="mc-hint text-sm">Nothing planned.</p> : null
                 ) : (
                   <ul className="mt-1 flex flex-col gap-1">
                     {deadlines.map((task) => (
@@ -232,7 +232,7 @@ function EventDialog({ event, defaultDate, onClose }: { event: CalendarEvent | n
   }
 
   return (
-    <Modal open onOpenChange={(open) => !open && onClose()} title={event ? "Edit event" : "New event"} description="Saved to your Mindcraft calendar only.">
+    <Modal open onOpenChange={(open) => !open && onClose()} title={event ? "Edit event" : "New event"}>
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <TextField label="Title" value={values.title} onChange={set("title")} error={errors.title} maxLength={200} autoFocus />
         <fieldset>

@@ -21,13 +21,13 @@ export function SearchDialog() {
   const total = foundTasks.length + foundNotes.length + foundEvents.length;
 
   return (
-    <Modal open={searchOpen} onOpenChange={setSearchOpen} title="Find something" description="Searches your tasks, notes, and Mindcraft calendar on this device.">
+    <Modal open={searchOpen} onOpenChange={setSearchOpen} title="Find something">
       <label htmlFor="workspace-search" className="sr-only">
         Search
       </label>
       <input id="workspace-search" type="search" className="mc-input" placeholder="Search…" value={query} autoFocus onChange={(event) => setQuery(event.target.value)} />
       <p className="mc-hint mt-2" role="status">
-        {term ? `${total} result${total === 1 ? "" : "s"}` : "Type to search."}
+        {term ? `${total} result${total === 1 ? "" : "s"}` : ""}
       </p>
       <div className="mt-2 flex max-h-[50vh] flex-col gap-4 overflow-y-auto">
         {foundTasks.length ? (

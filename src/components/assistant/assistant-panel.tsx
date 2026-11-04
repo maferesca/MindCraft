@@ -207,10 +207,7 @@ export function AssistantPanel() {
 
       <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-3" aria-live="polite" aria-relevant="additions">
         {messages.length === 0 && !pending ? (
-          <div className="mc-hint flex flex-col gap-2">
-            <p>Ask for help planning, understanding an instruction, or finding a first step.</p>
-            <p>Suggestions appear as proposals. Nothing changes until you apply them.</p>
-          </div>
+          <p className="mc-hint">Ask for help planning or getting started.</p>
         ) : null}
         <ol className="flex flex-col gap-3">
           {messages.map((message) => (
@@ -241,7 +238,7 @@ export function AssistantPanel() {
         {error ? (
           <div className="mt-3 rounded-xl border-2 border-danger p-3" role="alert">
             <p className="font-semibold text-danger">{error.message}</p>
-            <p className="mc-hint">Your message is kept in the box below. Your tasks and workspace are unchanged.</p>
+            <p className="mc-hint">Your message is kept below.</p>
             <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={() => send(error.text)}>
               <RotateCcw size={14} aria-hidden="true" /> Try again
             </button>

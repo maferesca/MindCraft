@@ -91,7 +91,6 @@ export function FocusTimerBlock({ compact = false }: { compact?: boolean }) {
       {timer.runState === "finished" ? (
         <div className="rounded-xl bg-surface-muted p-3 text-center" role="status">
           <p className="font-semibold">{timer.phase === "work" ? "Session finished." : "Break finished."}</p>
-          <p className="mc-hint">Your task stays as it is until you change it.</p>
           <div className="mt-2 flex flex-wrap justify-center gap-2">
             {timer.phase === "work" && timer.includeBreak ? (
               <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm" onClick={timer.startBreak}>

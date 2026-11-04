@@ -79,7 +79,6 @@ function Onboarding() {
                 <h1 id="step-heading" className="text-2xl font-bold">
                   What should we call you?
                 </h1>
-                <p className="mc-hint mt-1">Optional. It appears on your profile button.</p>
                 <div className="mt-4 max-w-sm">
                   <TextField label="Display name" optional value={name} maxLength={60} onChange={(event) => setName(event.target.value)} autoComplete="nickname" />
                 </div>
@@ -87,28 +86,25 @@ function Onboarding() {
             ) : null}
             {step === 1 ? (
               <>
-                <h1 id="step-heading" className="text-2xl font-bold">
+                <h1 id="step-heading" className="mb-4 text-2xl font-bold">
                   Pick a theme
                 </h1>
-                <p className="mc-hint mb-4 mt-1">You can change this any time in Appearance and reading.</p>
                 <AppearanceFields value={preferences} onChange={updatePreferences} fields={["theme", "accent"]} />
               </>
             ) : null}
             {step === 2 ? (
               <>
-                <h1 id="step-heading" className="text-2xl font-bold">
+                <h1 id="step-heading" className="mb-4 text-2xl font-bold">
                   Font and text size
                 </h1>
-                <p className="mc-hint mb-4 mt-1">Choose what is comfortable to read.</p>
-                <AppearanceFields value={preferences} onChange={updatePreferences} fields={["fontFamily", "textSize", "lineHeight"]} />
+                <AppearanceFields value={preferences} onChange={updatePreferences} fields={["fontFamily", "textSize", "lineHeight", "wordSpacing"]} />
               </>
             ) : null}
             {step === 3 ? (
               <>
-                <h1 id="step-heading" className="text-2xl font-bold">
+                <h1 id="step-heading" className="mb-4 text-2xl font-bold">
                   How much on screen at once?
                 </h1>
-                <p className="mc-hint mb-4 mt-1">Information density changes spacing around content.</p>
                 <AppearanceFields value={preferences} onChange={updatePreferences} fields={["density", "reducedMotion"]} />
               </>
             ) : null}
@@ -117,16 +113,13 @@ function Onboarding() {
                 <h1 id="step-heading" className="text-2xl font-bold">
                   Which tools might help?
                 </h1>
-                <p className="mc-hint mb-4 mt-1">We&apos;ll show a starter layout as a preview. Nothing is added until you confirm.</p>
+                <p className="mc-hint mb-4 mt-1">Nothing is added until you confirm.</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {BLOCK_ORDER.map((type) => (
                     <label key={type} className={`flex items-center gap-3 rounded-xl border-2 p-3 ${preferences.preferredTools.includes(type) ? "border-primary" : "border-border"}`}>
                       <input type="checkbox" className="h-5 w-5" checked={preferences.preferredTools.includes(type)} onChange={() => toggleTool(type)} />
                       <BlockTile type={type} size={36} />
-                      <span>
-                        <span className="block font-semibold">{BLOCK_DEFINITIONS[type].label}</span>
-                        <span className="mc-hint block text-sm">{BLOCK_DEFINITIONS[type].description}</span>
-                      </span>
+                      <span className="font-semibold">{BLOCK_DEFINITIONS[type].label}</span>
                     </label>
                   ))}
                 </div>
@@ -137,7 +130,7 @@ function Onboarding() {
                 <h1 id="step-heading" className="text-2xl font-bold">
                   Would reminders be welcome?
                 </h1>
-                <p className="mc-hint mb-4 mt-1">Reminders appear inside Mindcraft only. You can change or snooze them later.</p>
+                <p className="mc-hint mb-4 mt-1">Reminders only appear while Mindcraft is open.</p>
                 <div role="radiogroup" aria-label="Reminders" className="flex flex-col gap-2">
                   {[
                     ["off", "No reminders"],

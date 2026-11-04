@@ -19,7 +19,7 @@ export function OfflineBanner() {
   return (
     <div role="status" className="flex items-center justify-center gap-2 bg-text px-4 py-2 text-center text-background">
       <WifiOff size={16} aria-hidden="true" />
-      You&apos;re offline. Changes can&apos;t be saved until you reconnect. Text you type in planning and chat is kept on this device.
+      You&apos;re offline. Changes won&apos;t save until you reconnect.
     </div>
   );
 }

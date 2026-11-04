@@ -114,7 +114,7 @@ function StreakIndicator() {
         <Popover.Content className="mc-menu max-w-xs p-3" sideOffset={6}>
           <p className="font-semibold">Visit streak: {streak.current_streak}</p>
           <p className="mc-hint mt-1">
-            Days in a row you opened your workspace. Best: {streak.best_streak}. It counts visits only, not how much you did.
+            Days in a row you opened Mindcraft. Best: {streak.best_streak}.
           </p>
           <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={() => updatePreferences({ showStreak: false })}>
             Hide streak

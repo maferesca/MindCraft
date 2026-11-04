@@ -79,9 +79,7 @@ export function FocusMode() {
               </button>
             </div>
           </div>
-        ) : (
-          <p className="mc-hint mt-3">Choose one task to focus on. You can leave Focus Mode at any time.</p>
-        )}
+        ) : null}
       </div>
 
       {showTimer ? (

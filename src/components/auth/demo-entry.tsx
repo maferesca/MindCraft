@@ -14,7 +14,7 @@ export function DemoEntry() {
         Try Mindcraft without an account
       </h2>
       <p className="mc-hint mt-1">
-        The local demo keeps everything in this browser only. Sample tasks are fictional.
+        Data stays in this browser.
       </p>
       <label className="mt-3 flex items-center gap-2">
         <input type="checkbox" className="h-5 w-5" checked={withSamples} onChange={(event) => setWithSamples(event.target.checked)} />

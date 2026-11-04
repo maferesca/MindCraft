@@ -120,7 +120,7 @@ Notes, calendar events, email, and other settings are never sent. A voice record
 - Short, skippable setup with a live preview: name, theme and accent, font, text size, line spacing, density, motion, preferred tools, and reminders. Includes **Use defaults** and **Set this up later**.
 - New accounts start with an empty workspace showing "Your space, your way." and the actions Build my space, Help me choose, and Plan my day. A starter layout appears only as a preview and is added only after confirmation.
 - Compact header with profile menu (Profile, Appearance and reading, Workspace preferences, Notifications, AI and privacy, Account, Sign out), workspace name, an optional streak, and three modes. There is no sidebar.
-- **Creative Mode:** bottom inventory (one row on desktop with overflow arrows, a bottom sheet on phones), drag from the inventory or press to add, header-only drag handles, resizing with minimum sizes, snap grid, Save, Cancel, Undo, Redo (also Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y), hide or remove with an explanation, and non-drag controls (Move earlier or later, size presets, move left, right, up, or down).
+- **Creative Mode:** compact toolbar with numbered slots, plus an inventory panel organized into Planning, Focus, and Support. Drag from either one or click to add. Arrow keys, Enter, and number keys work in the toolbar. Also includes header-only drag handles, resizing with minimum sizes, snap grid, Save, Cancel, Undo, Redo (also Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y), hide or remove with an explanation, and non-drag controls (Move earlier or later, size presets, move left, right, up, or down).
 - **Blocks:**
   - **Task List:** quick add, full editor, status, filters, compact or expanded view, delete with Undo, Help me start, and Missing information with an editable draft message to copy.
   - **Calendar:** day, week, and month views. Internal events and work sessions, deadlines shown separately from scheduled sessions, events linkable to tasks. It is labelled as the Mindcraft calendar.
@@ -131,8 +131,8 @@ Notes, calendar events, email, and other settings are never sent. A voice record
 - Assistant panel (side panel on desktop, full screen on phones) with proposals you can Apply, Edit, or Dismiss. Errors offer Retry, and your text is kept.
 - Daily welcome card (once per local day, dismissible) with text, voice, and four quick choices. Plan my day covers text and voice with an editable transcript.
 - Voice capture: the microphone is requested only after you press Record. The recorder shows recording, stop, cancel, and processing states. Recordings are limited to 2 minutes and 5 MB, and the server checks the file type. Typing always works as an alternative.
-- Six complete themes (Warm Studio, Clear, Rose, Colorful, Monochrome, Dark) and five accents. Each has a light and a dark variant.
-- Reading preferences: font, text size, line spacing, letter spacing, and density. These apply everywhere, including dialogs and chat. Each setting has **Reset**, and there is **Restore appearance defaults**.
+- Seventeen complete themes (Warm Studio, Clear Blue, Rose Clay, Sage Garden, Lavender Mist, Ocean Breeze, Colorful, Monochrome, Midnight, Dark Cocoa, Sunset Pop, Tropical Splash, Neon Night, Quiet Paper, Quiet Night, Blue & Orange, Blue & Orange Dark) and five accents. Sunset Pop, Tropical Splash, and Neon Night are multicolor and tint each block header. Quiet Paper and Quiet Night each stay within a single hue. Blue & Orange and its dark version use a color pair that stays distinct for most types of color blindness. Status and selection are shown with words or symbols as well as color. Each accent has a light and a dark variant.
+- Reading preferences: font (System default, Arial, Verdana, Open Sans, Lexend, Atkinson Hyperlegible, Comic Neue, OpenDyslexic), text size, line spacing, letter spacing, word spacing, and density. Some people find the reading fonts easier to use, but they are options to try: Mindcraft does not claim that any font treats dyslexia. These apply everywhere, including dialogs and chat. Each setting has **Reset**, and there is **Restore appearance defaults**.
 - Optional streak: one visit per local day, using the saved timezone. Current and best streaks are stored and the streak can be hidden. There are no penalties.
 - In-app reminders: Off, Friendly, Playful, or Minimal, with quiet hours, a preferred time, an inactivity threshold, snooze, and turn off.
 - PWA: manifest, generated icons, and a service worker that caches the app shell and serves an offline page. An offline banner appears, and unsent chat and planning text is kept on the device.
@@ -158,7 +158,7 @@ Notes, calendar events, email, and other settings are never sent. A voice record
 
 ## Validation results
 
-Run on 2026-11-02:
+Run on 2026-11-02, with theme checks updated on 2026-11-03:
 
 | Check | Result |
 | --- | --- |
@@ -167,7 +167,7 @@ Run on 2026-11-02:
 | Production build (`next build`) | Passed |
 | Unit tests (Vitest) | 13 of 13 passed |
 | RLS isolation (PGlite, two accounts) | 20 of 20 checks passed |
-| Theme contrast (6 themes × 6 accents) | All text pairs ≥ 4.5:1 and all control borders and focus indicators ≥ 3:1 |
+| Theme contrast (17 themes × 6 accent options) | All text pairs ≥ 4.5:1 and all control borders and focus indicators ≥ 3:1, also under simulated protanopia, deuteranopia, and tritanopia |
 
 **Manual browser walkthrough (local demo, desktop 1366×860 and phone 375×812):** setup with live theme preview; empty workspace; adding blocks by pressing (no dragging); header drag; Undo, Redo, and Cancel restoring positions; Save surviving a reload; marking a step done without completing the task; completing a task updating Task List, Next step, and the calendar deadline; Focus Mode exit leaving the layout unchanged; removing the Task List block keeping all tasks; AI failure keeping the draft and changing no data; phone view in the desktop reading order with no horizontal scrolling; phone reordering through the bottom sheet; API returning 401 when signed out and 403 for the demo without opt-in.
 

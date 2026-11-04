@@ -1,4 +1,5 @@
 import type { AssistantContext } from "../schemas";
+import { THEME_IDS } from "../themes";
 
 // The single set of rules shared by the chat panel, Daily Planning, Help me
 // start, and Missing information. One assistant, one voice, one history.
@@ -147,7 +148,7 @@ export const ASSISTANT_RESPONSE_SCHEMA = {
           changes: {
             type: "object",
             properties: {
-              theme: { type: "string", enum: ["warm-studio", "clear", "rose", "colorful", "monochrome", "dark"] },
+              theme: { type: "string", enum: THEME_IDS },
               density: { type: "string", enum: ["compact", "comfortable", "spacious"] },
               textSize: { type: "integer" },
               lineHeight: { type: "number" },

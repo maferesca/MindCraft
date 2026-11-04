@@ -3,7 +3,6 @@ import type { BlockType, Breakpoint, GridPosition, WorkspaceBlock } from "./type
 export interface BlockDefinition {
   type: BlockType;
   label: string;
-  description: string;
   defaultSize: { w: number; h: number };
   minSize: { w: number; h: number };
 }
@@ -13,35 +12,30 @@ export const BLOCK_DEFINITIONS: Record<BlockType, BlockDefinition> = {
   task_list: {
     type: "task_list",
     label: "Tasks",
-    description: "Capture tasks, track status, and get help starting.",
     defaultSize: { w: 4, h: 7 },
     minSize: { w: 3, h: 4 },
   },
   calendar: {
     type: "calendar",
     label: "Calendar",
-    description: "Your Mindcraft calendar: events, work sessions, and deadlines.",
     defaultSize: { w: 5, h: 7 },
     minSize: { w: 4, h: 5 },
   },
   next_step: {
     type: "next_step",
-    label: "Next step",
-    description: "One task and the one action you are working on now.",
+    label: "Task guide",
     defaultSize: { w: 3, h: 5 },
     minSize: { w: 3, h: 4 },
   },
   focus_timer: {
     type: "focus_timer",
-    label: "Timer",
-    description: "Optional focus sessions with breaks. Never starts on its own.",
+    label: "Focus timer",
     defaultSize: { w: 3, h: 5 },
     minSize: { w: 2, h: 4 },
   },
   notes: {
     type: "notes",
     label: "Notes",
-    description: "Simple notes you can link to a task.",
     defaultSize: { w: 4, h: 6 },
     minSize: { w: 3, h: 4 },
   },

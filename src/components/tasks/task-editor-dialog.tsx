@@ -84,7 +84,7 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
       open
       onOpenChange={(open) => !open && onClose()}
       title={task ? "Edit task" : "New task"}
-      description="Only the title is required. Leave anything you don't know empty."
+      description="Only the title is required."
       wide
     >
       <form onSubmit={handleSubmit} noValidate className="grid gap-4 md:grid-cols-2">
@@ -98,13 +98,12 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
           <TextField
             label="Expected result"
             optional
-            hint="What does finished look like? For example: a one-page summary in the team folder."
             value={values.expected_result}
             onChange={set("expected_result")}
             maxLength={1000}
           />
         </div>
-        <TextField label="Deadline" optional type="date" value={values.due_date} onChange={set("due_date")} error={errors.due_date} hint="A deadline shows on the calendar. It does not book time." />
+        <TextField label="Deadline" optional type="date" value={values.due_date} onChange={set("due_date")} error={errors.due_date} />
         <SelectField label="Priority" optional value={values.priority} onChange={set("priority")}>
           <option value="">Not set</option>
           <option value="low">Low</option>
@@ -123,7 +122,6 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
         {task ? (
           <fieldset className="md:col-span-2">
             <legend className="mc-label">Your steps</legend>
-            <p className="mc-hint mb-2">Personal steps for this task. Completing steps does not complete the task.</p>
             <ol className="flex flex-col gap-1">
               {taskSteps.map((step, index) => (
                 <li key={step.id} className="flex items-center gap-2">

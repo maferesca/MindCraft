@@ -50,7 +50,7 @@ export function EmptyState() {
 
       {suggested.length ? (
         <p className="mc-hint mt-6">
-          Based on the tools you picked, we have a starter layout ready.{" "}
+          Starter layout ready.{" "}
           <button type="button" className="font-semibold text-primary underline underline-offset-4" onClick={() => setPreviewOpen(true)}>
             Preview it
           </button>
@@ -61,7 +61,7 @@ export function EmptyState() {
         open={previewOpen}
         onOpenChange={setPreviewOpen}
         title="Starter layout preview"
-        description="These blocks match the tools you chose. Nothing is added until you confirm."
+        description="Nothing is added until you confirm."
         footer={
           <>
             <button type="button" className="mc-btn mc-btn-ghost" onClick={() => setPreviewOpen(false)}>
@@ -88,10 +88,7 @@ export function EmptyState() {
           {suggested.map((type) => (
             <li key={type} className="flex items-center gap-3 rounded-xl border border-border p-3 text-left">
               <BlockTile type={type} />
-              <span>
-                <span className="block font-semibold">{BLOCK_DEFINITIONS[type].label}</span>
-                <span className="mc-hint block">{BLOCK_DEFINITIONS[type].description}</span>
-              </span>
+              <span className="font-semibold">{BLOCK_DEFINITIONS[type].label}</span>
             </li>
           ))}
         </ul>
