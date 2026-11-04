@@ -141,6 +141,35 @@ function ProposalBody({ proposal, editing, onChange }: { proposal: Proposal; edi
                 ) : (
                   <p className="font-semibold">{task.title}</p>
                 )}
+                {/* Apply saves these fields too, so the review must show all of them. */}
+                {editing && (task.description || task.expected_result) ? (
+                  <div className="mt-2 flex flex-col gap-2">
+                    {(["description", "expected_result"] as const).map((field) =>
+                      task[field] ? (
+                        <div key={field} className="flex items-center gap-2">
+                          <span className="min-w-0 flex-1 text-sm">
+                            {field === "description" ? "Instructions" : "Expected result"}: {task[field]}
+                          </span>
+                          <button
+                            type="button"
+                            className="mc-btn mc-btn-ghost mc-btn-sm"
+                            aria-label={`Remove ${field === "description" ? "instructions" : "expected result"} from task ${index + 1}`}
+                            onClick={() =>
+                              onChange({ ...proposal, tasks: proposal.tasks.map((item, i) => (i === index ? { ...item, [field]: undefined } : item)) })
+                            }
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : null,
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {task.description ? <p className="mt-1 text-sm">Instructions: {task.description}</p> : null}
+                    {task.expected_result ? <p className="mt-1 text-sm">Expected result: {task.expected_result}</p> : null}
+                  </>
+                )}
                 <div className="mt-1 flex flex-wrap gap-1.5 text-sm">
                   <span className="mc-chip">{task.due_date ? formatDueDate(task.due_date) : "No deadline given"}</span>
                   {task.priority ? <span className="mc-chip">{PRIORITY_LABELS[task.priority]}</span> : null}

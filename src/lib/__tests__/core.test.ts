@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeProposals } from "../ai/proposal-guard";
+import { sanitizeProposals, stripInlineMarkdown } from "../ai/proposal-guard";
 import { detectDeclines } from "../ai/client";
 import { CATALOG_ITEMS } from "../block-catalog";
 import { BLOCK_ORDER, positionsForBreakpoint, sortForPhone } from "../blocks";
+import { clearSessionData } from "../clear-session-data";
 import { isWithinQuietHours, nextStreak } from "../dates";
 import { moveInOrder } from "../layout-edit";
 import { DEFAULT_PREFERENCES, normalizePreferences } from "../preferences";
@@ -123,6 +124,40 @@ describe("assistant declines (acceptance check 9)", () => {
     expect(detectDeclines(["Please, no timer for me."])).toContain("timer");
     expect(detectDeclines(["I don't want to use a timer"])).toContain("timer");
     expect(detectDeclines(["Help me start the slides"])).toEqual([]);
+  });
+
+  it("detects Spanish declines", () => {
+    expect(detectDeclines(["No me pongas temporizador."])).toContain("timer");
+    expect(detectDeclines(["Hoy sin cronómetro"])).toContain("timer");
+    expect(detectDeclines(["Prefiero sin descansos"])).toContain("breaks");
+    expect(detectDeclines(["No quiero planificación"])).toContain("planning");
+    expect(detectDeclines(["Ayúdame a planificar la pausa de la tarde"])).toEqual([]);
+  });
+});
+
+describe("assistant reply text", () => {
+  it("removes inline Markdown markers and keeps lists", () => {
+    expect(stripInlineMarkdown("1. **[QA] Task** – vence __hoy__ en `main`\n2. * dos * tres")).toBe("1. [QA] Task – vence hoy en main\n2. * dos * tres");
+  });
+});
+
+describe("clearing session data on sign-out", () => {
+  it("removes drafts and the focus task but keeps proposal outcomes and appearance", () => {
+    const data = new Map([
+      ["mindcraft-draft:assistant", "private"],
+      ["mindcraft-draft:planning", "private"],
+      ["mindcraft-focus-task", "id"],
+      ["mindcraft-proposal:message:0", "applied"],
+      ["mindcraft-appearance", "{}"],
+    ]);
+    clearSessionData({
+      get length() {
+        return data.size;
+      },
+      key: (index) => [...data.keys()][index] ?? null,
+      removeItem: (key) => void data.delete(key),
+    });
+    expect([...data.keys()]).toEqual(["mindcraft-proposal:message:0", "mindcraft-appearance"]);
   });
 });
 

@@ -275,7 +275,7 @@ Do not restrict every answer to motivational advice or questions.
 - If you use question, do not repeat that same question in reply.
 - Do not use Markdown code fences around the JSON.
 - Formatting inside reply or a drafted message may use short paragraphs
-  and simple lists.
+  and simple lists. Write plain text: no Markdown bold, italics, or headings.
 - Do not output analysis, internal reasoning, or commentary outside JSON.
 - Omit unused optional properties. If a provider-specific transport requires
   null, use it only as instructed by that transport.

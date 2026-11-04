@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { cacheAppearance } from "@/lib/appearance-cache";
 import { BLOCK_DEFINITIONS, GRID_COLUMNS, findFreePosition, sizeFor } from "@/lib/blocks";
+import { clearSessionData } from "@/lib/clear-session-data";
 import { createLocalRepository } from "@/lib/data/local-repository";
 import type { Repository, Row, TableName } from "@/lib/data/repository";
 import { createSupabaseRepository } from "@/lib/data/supabase-repository";
@@ -782,8 +783,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             const created = await createTask(
               {
                 title: task.title,
-                description: task.description ?? null,
-                expected_result: task.expected_result ?? null,
+                description: task.description || null,
+                expected_result: task.expected_result || null,
                 due_date: task.due_date ?? null,
                 priority: task.priority ?? null,
               },
@@ -826,6 +827,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await repoRef.current?.signOut();
+    clearSessionData();
     // A full page load (not client navigation) drops every in-memory record of this account.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign("/sign-in");

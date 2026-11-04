@@ -2,12 +2,13 @@
 
 import { DropdownMenu } from "radix-ui";
 import { Loader2, MessageCircle, MoreHorizontal, RotateCcw, Send, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { askAssistant } from "@/lib/ai/client";
 import { proposalSchema, type Proposal } from "@/lib/schemas";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI, type AssistantMode } from "../providers/workspace-ui";
 import { IconButton } from "../ui/icon-button";
+import { restoreFocus } from "../ui/restore-focus";
 import { ProposalCard } from "./proposal-card";
 import { RateLimitNotice } from "./rate-limit-notice";
 import { useAssistantContext } from "./use-assistant-context";
@@ -21,6 +22,23 @@ function proposalsFrom(value: unknown): Proposal[] {
     const parsed = proposalSchema.safeParse(item);
     return parsed.success ? [parsed.data] : [];
   });
+}
+
+// Below the lg breakpoint the panel covers the screen, so the page behind it
+// must not receive focus. On wider screens it sits beside the workspace.
+function keepTabInFullScreenPanel(event: KeyboardEvent<HTMLElement>) {
+  if (!window.matchMedia("(max-width: 63.99rem)").matches) return;
+  const focusable = [...event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), textarea, input, a[href]")];
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (!first || !last) return;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 export function AssistantButton() {
@@ -135,7 +153,10 @@ export function AssistantPanel() {
   }, [assistantOpen, assistantRequest]);
 
   useEffect(() => {
-    if (assistantOpen) inputRef.current?.focus();
+    if (!assistantOpen) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    inputRef.current?.focus();
+    return () => restoreFocus(opener);
   }, [assistantOpen]);
 
   useEffect(() => {
@@ -155,7 +176,9 @@ export function AssistantPanel() {
       aria-label="Assistant"
       className="fixed inset-0 z-50 flex flex-col bg-surface lg:inset-auto lg:bottom-4 lg:right-4 lg:top-[calc(var(--header-height)+0.5rem)] lg:w-[26rem] lg:rounded-2xl lg:border lg:border-border lg:shadow-2xl"
       onKeyDown={(event) => {
-        if (event.key === "Escape") closeAssistant();
+        // Portaled menus bubble here through React, but Escape belongs to them.
+        if (event.key === "Escape" && event.currentTarget.contains(event.target as Node)) closeAssistant();
+        if (event.key === "Tab") keepTabInFullScreenPanel(event);
       }}
     >
       <header className="flex items-center gap-2 border-b border-border px-4 py-2">

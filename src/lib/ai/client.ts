@@ -56,6 +56,10 @@ const DECLINE_PATTERNS: Array<[NonNullable<AssistantContext["declined"]>[number]
   ["timer", /\b(no|don'?t|do not|without|stop|skip)\b[^.!?]{0,30}\btimers?\b|\btimers? (don'?t|do not) (help|work)/i],
   ["breaks", /\b(no|don'?t|do not|without|skip)\b[^.!?]{0,30}\bbreaks?\b/i],
   ["planning", /\b(no|don'?t|do not|without|skip)\b[^.!?]{0,30}\b(plan|planning)\b/i],
+  // Spanish. Some words end in an accented letter, which \b does not treat as a word character.
+  ["timer", /\b(no|sin|nada de|evita|quita|omite)\b[^.!?]{0,30}\b(temporizador(es)?|cron[oó]metros?)(?![a-záéíóúñ])/i],
+  ["breaks", /\b(no|sin|nada de|evita|quita|omite)\b[^.!?]{0,30}\b(pausas?|descansos?)(?![a-záéíóúñ])/i],
+  ["planning", /\b(no|sin|nada de|evita|quita|omite)\b[^.!?]{0,30}\b(planes|plan|planificar|planear|planificaci[oó]n)(?![a-záéíóúñ])/i],
 ];
 
 export function detectDeclines(userMessages: string[]): NonNullable<AssistantContext["declined"]> {

@@ -6,6 +6,12 @@ const DATE_HINT =
   /\d|today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month|deadline|due|january|february|march|april|may|june|july|august|september|october|november|december|morgen|heute|mañana|hoy|demain|aujourd|domani|oggi|amanhã|hoje/i;
 const PRIORITY_HINT = /urgent|asap|priority|important|critical|high|low|dringend|wichtig|urgente|importante|prioridad|priorit/i;
 
+// Chat bubbles show plain text, so bold or italic markers would appear literally.
+// List markers and line breaks are kept because they read correctly as text.
+export function stripInlineMarkdown(text: string): string {
+  return text.replace(/\*\*([^*\n]+)\*\*/g, "$1").replace(/__([^_\n]+)__/g, "$1").replace(/`([^`\n]+)`/g, "$1");
+}
+
 export function sanitizeProposals(raw: unknown, context: AssistantContext, userText: string): Proposal[] {
   if (!Array.isArray(raw)) return [];
   const knownTaskIds = new Set([context.task?.id, ...(context.otherTasks ?? []).map((task) => task.id)].filter(Boolean));

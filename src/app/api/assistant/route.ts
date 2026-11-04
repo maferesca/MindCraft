@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ASSISTANT_RESPONSE_SCHEMA, ASSISTANT_RULES, buildContextText } from "@/lib/ai/assistant-prompt";
 import { AI_ERROR_STATUS, AiUnavailableError, generate } from "@/lib/ai/gemini";
-import { sanitizeProposals } from "@/lib/ai/proposal-guard";
+import { sanitizeProposals, stripInlineMarkdown } from "@/lib/ai/proposal-guard";
 import { errorResponse, rateLimit, requireAiIdentity } from "@/lib/ai/request-guard";
 import { assistantRequestSchema, type AssistantResult } from "@/lib/schemas";
 
@@ -58,8 +58,8 @@ export async function POST(request: Request) {
 
     const userText = messages.filter((message) => message.role === "user").map((message) => message.content).join("\n");
     const result: AssistantResult = {
-      reply: raw.reply.trim().slice(0, 2000),
-      question: typeof raw.question === "string" && raw.question.trim() ? raw.question.trim().slice(0, 300) : undefined,
+      reply: stripInlineMarkdown(raw.reply.trim()).slice(0, 2000),
+      question: typeof raw.question === "string" && raw.question.trim() ? stripInlineMarkdown(raw.question.trim()).slice(0, 300) : undefined,
       proposals: sanitizeProposals(raw.proposals, context, userText),
     };
     return NextResponse.json(result);

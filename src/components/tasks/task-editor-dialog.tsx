@@ -129,7 +129,7 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
         </datalist>
         <TextField label="Assignee" optional value={values.assignee} maxLength={120} onChange={set("assignee")} />
         <div className="md:col-span-2">
-          <TextField label="Source link" optional type="url" placeholder="https://…" value={values.source_link} onChange={set("source_link")} maxLength={1000} />
+          <TextField label="Source link" optional type="url" placeholder="https://…" value={values.source_link} error={errors.source_link} onChange={set("source_link")} maxLength={1000} />
         </div>
 
         {task ? (

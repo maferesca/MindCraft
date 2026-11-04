@@ -67,8 +67,21 @@ function CreativeControls({ block, breakpoint, actions, title }: { block: Worksp
   const preset = breakpoint === "sm" ? "" : currentSizePreset(block.layouts[breakpoint], breakpoint);
   return (
     <div className="flex items-center gap-0.5">
-      <IconButton size="sm" label={`Move ${title} earlier`} icon={<ChevronUp size={18} />} disabled={actions.isFirst} onClick={actions.moveEarlier} />
-      <IconButton size="sm" label={`Move ${title} later`} icon={<ChevronDown size={18} />} disabled={actions.isLast} onClick={actions.moveLater} />
+      {/* aria-disabled, not disabled: a button that reaches the end must keep keyboard focus. */}
+      <IconButton
+        size="sm"
+        label={`Move ${title} earlier`}
+        icon={<ChevronUp size={18} />}
+        aria-disabled={actions.isFirst}
+        onClick={actions.isFirst ? undefined : actions.moveEarlier}
+      />
+      <IconButton
+        size="sm"
+        label={`Move ${title} later`}
+        icon={<ChevronDown size={18} />}
+        aria-disabled={actions.isLast}
+        onClick={actions.isLast ? undefined : actions.moveLater}
+      />
       <DropdownMenu.Root>
         <DropdownMenu.Trigger className="mc-icon-btn mc-icon-btn-sm" aria-label={`Layout options for ${title}`} title="Layout options">
           <MoreHorizontal size={18} aria-hidden="true" />

@@ -14,7 +14,17 @@ const optionalText = (max: number) =>
     .nullable()
     .optional();
 
-export const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use the format YYYY-MM-DD");
+const HTTP_URL_MESSAGE = "Use a full link starting with http:// or https://";
+
+export function isHttpUrl(value: string) {
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
+
+export const isoDate =z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use the format YYYY-MM-DD");
 
 export const taskInputSchema = z.object({
   title: z.string().trim().min(1, "Give the task a title").max(200),
@@ -23,7 +33,14 @@ export const taskInputSchema = z.object({
   due_date: isoDate.nullable().optional(),
   due_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Use a valid time").nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).nullable().optional(),
-  source_link: optionalText(1000),
+  source_link: z
+    .string()
+    .trim()
+    .max(1000)
+    .refine((value) => value === "" || isHttpUrl(value), HTTP_URL_MESSAGE)
+    .transform((value) => (value === "" ? null : value))
+    .nullable()
+    .optional(),
   project_id: z.string().uuid().nullable().optional(),
   assignee: optionalText(120),
   status: z.enum(["todo", "in_progress", "done"]).optional(),
@@ -42,13 +59,7 @@ const httpUrl = z
   .string()
   .trim()
   .max(2000)
-  .refine((value) => {
-    try {
-      return ["http:", "https:"].includes(new URL(value).protocol);
-    } catch {
-      return false;
-    }
-  }, "Use a full link starting with http:// or https://");
+  .refine(isHttpUrl, HTTP_URL_MESSAGE);
 
 export const resourceInputSchema = z.object({
   name: z.string().trim().min(1, "Give the link a name").max(200),
