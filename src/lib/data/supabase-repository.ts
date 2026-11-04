@@ -2,7 +2,7 @@
 
 import { getBrowserSupabase } from "../supabase/client";
 import type { Streak } from "../types";
-import { keyColumn, type Repository, type Row, type TableName } from "./repository";
+import { RepositoryError, keyColumn, type Repository, type Row, type TableName } from "./repository";
 
 export async function createSupabaseRepository(): Promise<Repository | null> {
   const supabase = getBrowserSupabase();
@@ -10,8 +10,8 @@ export async function createSupabaseRepository(): Promise<Repository | null> {
   const user = data.user;
   if (!user) return null;
 
-  function fail(action: string, error: { message: string } | null): never {
-    throw new Error(`Could not ${action}: ${error?.message ?? "unknown error"}`);
+  function fail(action: string, error: { message: string; code?: string } | null): never {
+    throw new RepositoryError(`Could not ${action}: ${error?.message ?? "unknown error"}`, error?.code);
   }
 
   return {

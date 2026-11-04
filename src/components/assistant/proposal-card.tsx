@@ -1,46 +1,32 @@
 "use client";
 
 import { Check, Copy, Pencil, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { BLOCK_DEFINITIONS } from "@/lib/blocks";
 import { PREFERENCE_LABELS } from "@/lib/preferences";
 import type { Proposal } from "@/lib/schemas";
 import { PRIORITY_LABELS, formatDueDate } from "@/lib/task-helpers";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useNotify } from "../ui/notifications";
+import { useProposalOutcome } from "./proposal-outcome";
+import { TaskPlanCard } from "./task-plan-card";
 
-type Outcome = "pending" | "applied" | "dismissed";
+type SimpleProposal = Exclude<Proposal, { type: "task_plan" }>;
 
-function readOutcome(key: string): Outcome {
-  try {
-    return (window.localStorage.getItem(`mindcraft-proposal:${key}`) as Outcome) || "pending";
-  } catch {
-    return "pending";
-  }
+export function ProposalCard({ proposal, storageKey }: { proposal: Proposal; storageKey: string }) {
+  if (proposal.type === "task_plan") return <TaskPlanCard proposal={proposal} storageKey={storageKey} />;
+  return <SimpleProposalCard proposal={proposal} storageKey={storageKey} />;
 }
 
 // A suggestion with Apply, Edit, and Dismiss. Nothing changes before Apply.
-export function ProposalCard({ proposal, storageKey }: { proposal: Proposal; storageKey: string }) {
+function SimpleProposalCard({ proposal, storageKey }: { proposal: SimpleProposal; storageKey: string }) {
   const { applyProposal, tasks } = useWorkspaceData();
   const { notify } = useNotify();
-  const [outcome, setOutcome] = useState<Outcome>("pending");
+  const [outcome, remember] = useProposalOutcome(storageKey);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<Proposal>(proposal);
+  const [draft, setDraft] = useState<SimpleProposal>(proposal);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOutcome(readOutcome(storageKey));
-  }, [storageKey]);
-
-  function remember(next: Outcome) {
-    setOutcome(next);
-    try {
-      window.localStorage.setItem(`mindcraft-proposal:${storageKey}`, next);
-    } catch {
-      // Storage unavailable.
-    }
-  }
+  const busyRef = useRef(false);
 
   async function apply() {
     if (draft.type === "draft_clarification") {
@@ -52,14 +38,17 @@ export function ProposalCard({ proposal, storageKey }: { proposal: Proposal; sto
       }
       return;
     }
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     try {
-      const message = await applyProposal(draft);
+      const message = await applyProposal(draft, storageKey);
       remember("applied");
       notify(message);
     } catch (error) {
       notify(error instanceof Error ? error.message : "That suggestion could not be applied.", { tone: "error" });
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -107,7 +96,7 @@ export function ProposalCard({ proposal, storageKey }: { proposal: Proposal; sto
   );
 }
 
-function ProposalBody({ proposal, editing, onChange }: { proposal: Proposal; editing: boolean; onChange: (next: Proposal) => void }) {
+function ProposalBody({ proposal, editing, onChange }: { proposal: SimpleProposal; editing: boolean; onChange: (next: SimpleProposal) => void }) {
   switch (proposal.type) {
     case "create_tasks":
       return (

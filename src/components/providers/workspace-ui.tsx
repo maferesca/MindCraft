@@ -36,8 +36,8 @@ interface WorkspaceUI {
   openPlanning: (prefill?: string) => void;
   closePlanning: () => void;
 
-  taskEditor: { taskId: string | null } | null;
-  openTaskEditor: (taskId: string | null) => void;
+  taskEditor: { taskId: string | null; title?: string } | null;
+  openTaskEditor: (taskId: string | null, title?: string) => void;
   closeTaskEditor: () => void;
 
   missingInfoTaskId: string | null;
@@ -62,7 +62,7 @@ export function WorkspaceUIProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<SettingsSection | null>(null);
   const [planningOpen, setPlanningOpen] = useState(false);
   const [planningPrefill, setPlanningPrefill] = useState("");
-  const [taskEditor, setTaskEditor] = useState<{ taskId: string | null } | null>(null);
+  const [taskEditor, setTaskEditor] = useState<{ taskId: string | null; title?: string } | null>(null);
   const [missingInfoTaskId, setMissingInfoTaskId] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -125,7 +125,7 @@ export function WorkspaceUIProvider({ children }: { children: ReactNode }) {
     closePlanning: () => setPlanningOpen(false),
 
     taskEditor,
-    openTaskEditor: (taskId) => setTaskEditor({ taskId }),
+    openTaskEditor: (taskId, title) => setTaskEditor({ taskId, title }),
     closeTaskEditor: () => setTaskEditor(null),
 
     missingInfoTaskId,

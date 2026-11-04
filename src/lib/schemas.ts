@@ -44,6 +44,7 @@ export const taskInputSchema = z.object({
   project_id: z.string().uuid().nullable().optional(),
   assignee: optionalText(120),
   status: z.enum(["todo", "in_progress", "done"]).optional(),
+  estimated_minutes: z.number().int("Use whole minutes").min(1, "Use 1 to 600 minutes").max(600, "Use 1 to 600 minutes").nullable().optional(),
 });
 export type TaskInput = z.infer<typeof taskInputSchema>;
 
@@ -106,7 +107,32 @@ const proposedTask = z.object({
   steps: z.array(z.string().trim().min(1).max(300)).max(8).optional(),
 });
 
+export const TASK_PLAN_FIELDS = ["title", "deliverable", "done_when", "first_action"] as const;
+
+const blockChoice = z.object({ block_type: z.enum(BLOCK_TYPES), reason: z.string().trim().max(200).optional() });
+
 export const proposalSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("task_plan"),
+    summary: z.string().max(400),
+    // Set only to add this plan to the selected task instead of creating a task.
+    task_id: z.string().uuid().optional(),
+    task: z.object({
+      title: z.string().trim().min(1).max(200),
+      deliverable: z.string().trim().max(1000).optional(),
+      done_when: z.string().trim().max(500).optional(),
+      estimated_minutes: z.number().int().min(1).max(600).optional(),
+      first_action: z.string().trim().min(1).max(500),
+      due_date: isoDate.optional(),
+      priority: z.enum(["low", "medium", "high"]).optional(),
+    }),
+    // Fields the person stated. Everything else is shown as a suggestion.
+    stated_by_user: z.array(z.enum(TASK_PLAN_FIELDS)).max(4).optional(),
+    recommended_block: blockChoice.optional(),
+    alternative_block: blockChoice.optional(),
+    block_limitation: z.string().trim().max(200).optional(),
+    split_suggestion: z.string().trim().max(300).optional(),
+  }),
   z.object({
     type: z.literal("create_tasks"),
     summary: z.string().max(400),
@@ -167,6 +193,7 @@ export const assistantContextSchema = z.object({
       title: z.string().max(200),
       description: z.string().max(4000).nullable().optional(),
       expected_result: z.string().max(1000).nullable().optional(),
+      estimated_minutes: z.number().int().nullable().optional(),
       due_date: z.string().max(20).nullable().optional(),
       priority: z.string().max(10).nullable().optional(),
       status: z.string().max(20),
@@ -177,11 +204,13 @@ export const assistantContextSchema = z.object({
   // Titles only, so the assistant can compare tasks without seeing everything.
   otherTasks: z.array(z.object({ id: z.string().uuid(), title: z.string().max(200), status: z.string().max(20), due_date: z.string().max(20).nullable() })).max(30).optional(),
   visibleBlocks: z.array(z.enum(BLOCK_TYPES)).max(20).optional(),
+  hiddenBlocks: z.array(z.enum(BLOCK_TYPES)).max(20).optional(),
   preferences: z
     .object({
       responseDetail: z.enum(["brief", "balanced", "detailed"]),
       language: z.string().max(40),
       planningStyle: z.string().max(40),
+      taskPresentation: z.string().max(40).optional(),
       focusTime: z.string().max(40).optional(),
       startHelp: z.array(z.string().max(40)).max(5).optional(),
       focusMinutes: z.number().int().min(1).max(600).optional(),

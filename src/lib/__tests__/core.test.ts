@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { buildContextText } from "../ai/assistant-prompt";
+import { completionReserve } from "../ai/completion-reserve";
 import { sanitizeProposals, stripInlineMarkdown } from "../ai/proposal-guard";
 import { detectDeclines } from "../ai/client";
 import { CATALOG_ITEMS } from "../block-catalog";
+import { BLOCK_CAPABILITIES, blockPlacement, capabilityText } from "../block-capabilities";
 import { BLOCK_ORDER, positionsForBreakpoint, sortForPhone } from "../blocks";
 import { clearSessionData } from "../clear-session-data";
 import { isWithinQuietHours, nextStreak } from "../dates";
 import { moveInOrder } from "../layout-edit";
 import { DEFAULT_PREFERENCES, normalizePreferences } from "../preferences";
-import { proposalSchema, type AssistantContext } from "../schemas";
+import { proposalSchema, taskInputSchema, type AssistantContext, type Proposal } from "../schemas";
+import { findNamedTask, isVagueTitle, proposalRecordId } from "../task-plan";
 import { THEME_IDS } from "../themes";
 import type { WorkspaceBlock } from "../types";
 
@@ -139,6 +142,150 @@ describe("assistant declines (acceptance check 9)", () => {
 describe("assistant reply text", () => {
   it("removes inline Markdown markers and keeps lists", () => {
     expect(stripInlineMarkdown("1. **[QA] Task** – vence __hoy__ en `main`\n2. * dos * tres")).toBe("1. [QA] Task – vence hoy en main\n2. * dos * tres");
+  });
+});
+
+describe("task plans", () => {
+  const OTHER_ID = "22222222-2222-4222-8222-222222222222";
+  const plan = (extra: Record<string, unknown> = {}, task: Record<string, unknown> = {}) => ({
+    type: "task_plan",
+    summary: "Plan",
+    task: { title: "Draft the report outline", first_action: "Open a blank note", ...task },
+    ...extra,
+  });
+  const context: AssistantContext = { mode: "chat", task: null };
+  const single = (raw: unknown, ctx = context, text = "help me") => sanitizeProposals([raw], ctx, text)[0] as Extract<Proposal, { type: "task_plan" }> | undefined;
+
+  it("keeps a valid plan", () => {
+    const result = single(plan({ recommended_block: { block_type: "notes", reason: "Rough writing" } }, { estimated_minutes: 30 }));
+    expect(result?.recommended_block?.block_type).toBe("notes");
+    expect(result?.task.estimated_minutes).toBe(30);
+  });
+
+  it("removes a workspace block type that does not exist and keeps the plan", () => {
+    const result = single(plan({ recommended_block: { block_type: "ai_chat", reason: "x" }, alternative_block: { block_type: "notes" } }));
+    expect(result?.recommended_block?.block_type).toBe("next_step");
+    expect(result?.alternative_block).toBeUndefined();
+  });
+
+  it("falls back to the Task guide when the model recommends nothing", () => {
+    expect(single(plan())?.recommended_block?.block_type).toBe("next_step");
+    expect(single(plan({ block_limitation: "No block can send email" }))?.recommended_block).toBeUndefined();
+  });
+
+  it("drops an alternative that repeats the primary block", () => {
+    expect(single(plan({ recommended_block: { block_type: "notes" }, alternative_block: { block_type: "notes" } }))?.alternative_block).toBeUndefined();
+  });
+
+  it.each([0, -5, 601, 12.5, "30"])("removes the invalid duration %s", (minutes) => {
+    const result = single(plan({}, { estimated_minutes: minutes }));
+    expect(result).toBeDefined();
+    expect(result?.task.estimated_minutes).toBeUndefined();
+  });
+
+  it("rejects a plan aimed at a task that is not selected", () => {
+    expect(single(plan({ task_id: OTHER_ID }))).toBeUndefined();
+    const withOther: AssistantContext = { mode: "chat", task: null, otherTasks: [{ id: OTHER_ID, title: "Other", status: "todo", due_date: null }] };
+    expect(single(plan({ task_id: OTHER_ID }), withOther)).toBeUndefined();
+  });
+
+  it("removes deadlines and priorities the person did not state", () => {
+    const result = single(plan({}, { due_date: "2026-11-20", priority: "high" }), context, "help me with this");
+    expect(result?.task.due_date).toBeUndefined();
+    expect(result?.task.priority).toBeUndefined();
+  });
+
+  it("does not let the model claim its own suggestion was stated", () => {
+    const result = single(plan({ stated_by_user: ["title", "deliverable"] }, { title: "Draft the quarterly budget", deliverable: "Twelve slide presentation" }), context, "I must draft the quarterly budget");
+    expect(result?.stated_by_user).toEqual(["title"]);
+  });
+
+  it("flags vague titles", () => {
+    expect(isVagueTitle("Work on the project")).toBe(true);
+    expect(isVagueTitle("Trabajar en el proyecto")).toBe(true);
+    expect(isVagueTitle("Draft the report outline")).toBe(false);
+  });
+
+  it("derives the same valid id for the same proposal", async () => {
+    const id = await proposalRecordId("message:0");
+    expect(id).toBe(await proposalRecordId("message:0"));
+    expect(id).not.toBe(await proposalRecordId("message:1"));
+    expect(proposalSchema.safeParse(plan({ task_id: id })).success).toBe(true);
+  });
+
+  it("finds a task named in a message, preferring the longest title", () => {
+    const tasks = [
+      { id: "a", title: "Report", status: "todo" as const },
+      { id: "b", title: "Report for Ana", status: "todo" as const },
+      { id: "c", title: "Finished one", status: "done" as const },
+    ];
+    expect(findNamedTask("Please plan the report for Ana", tasks)?.id).toBe("b");
+    expect(findNamedTask("Plan finished one", tasks)).toBeNull();
+  });
+});
+
+describe("workspace block capabilities", () => {
+  it("covers every block type with real data and limits", () => {
+    expect(Object.keys(BLOCK_CAPABILITIES).sort()).toEqual([...BLOCK_ORDER].sort());
+    for (const type of BLOCK_ORDER) {
+      const capability = BLOCK_CAPABILITIES[type];
+      expect(capability.supportedData.length && capability.actions.length && capability.appropriateWhen.length && capability.limits.length).toBeGreaterThan(0);
+      expect(capabilityText()).toContain(type);
+    }
+  });
+
+  it("uses saved blocks, not the model, to decide placement", () => {
+    const blocks = [
+      { block_type: "notes" as const, hidden: false },
+      { block_type: "calendar" as const, hidden: true },
+    ];
+    expect(blockPlacement(blocks, "notes")).toBe("placed");
+    expect(blockPlacement(blocks, "calendar")).toBe("hidden");
+    expect(blockPlacement(blocks, "resources")).toBe("available");
+  });
+
+  it("tells the model which blocks are placed, hidden, or only in the inventory", () => {
+    const text = buildContextText({ mode: "chat", visibleBlocks: ["notes"], hiddenBlocks: ["calendar"] });
+    expect(text).toContain('{"type":"notes","placement":"placed"}');
+    expect(text).toContain('{"type":"calendar","placement":"hidden"}');
+    expect(text).toContain('{"type":"resources","placement":"available"}');
+  });
+});
+
+describe("saved preferences in the assistant context", () => {
+  const preferences = { responseDetail: "brief" as const, language: "auto", planningStyle: "short_list" };
+
+  it("turns each preference into a direct instruction", () => {
+    const text = buildContextText({ mode: "chat", preferences: { ...preferences, responseDetail: "detailed", planningStyle: "one_step", taskPresentation: "checklist" } });
+    expect(text).toContain("Include the reasoning and an example.");
+    expect(text).toContain("Give only the single next action");
+    expect(text).toContain("Present actions as a list.");
+  });
+
+  it("adds no presentation instruction when none is saved", () => {
+    const text = buildContextText({ mode: "chat", preferences: { ...preferences, taskPresentation: "not_set" } });
+    expect(text).not.toContain("Present actions as a list.");
+    expect(text).not.toContain("Use short paragraphs");
+  });
+});
+
+describe("task estimates in the task form", () => {
+  it("accepts whole minutes only, from 1 to 600", () => {
+    expect(taskInputSchema.safeParse({ title: "x", estimated_minutes: 30 }).success).toBe(true);
+    expect(taskInputSchema.safeParse({ title: "x", estimated_minutes: null }).success).toBe(true);
+    for (const value of [0, 601, 1.5]) expect(taskInputSchema.safeParse({ title: "x", estimated_minutes: value }).success).toBe(false);
+  });
+});
+
+describe("Groq completion reserve", () => {
+  it("keeps the prompt and the reserve inside the token limit", () => {
+    expect(completionReserve(21000, 8000)).toBe(2000);
+    expect(Math.ceil(21000 / 3.5) + completionReserve(21000, 8000)).toBeLessThanOrEqual(8000);
+  });
+
+  it("uses a higher limit when one is available and always leaves room to answer", () => {
+    expect(completionReserve(21000, 30000)).toBe(3000);
+    expect(completionReserve(40000, 8000)).toBe(800);
   });
 });
 

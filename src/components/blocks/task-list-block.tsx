@@ -1,7 +1,7 @@
 "use client";
 
 import { DropdownMenu } from "radix-ui";
-import { CircleHelp, Focus, MoreHorizontal, Plus, Sparkles, Trash2 } from "lucide-react";
+import { CircleHelp, Focus, ListChecks, MessageCircleQuestion, Minimize2, MoreHorizontal, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { PRIORITY_LABELS, STATUS_LABELS, TASK_FILTER_LABELS, filterTasks, formatDeadline, isOverdue, sortTasks, type TaskFilter, type TaskSort } from "@/lib/task-helpers";
 import type { Task, TaskStatus, WorkspaceBlock } from "@/lib/types";
@@ -139,6 +139,7 @@ function TaskMeta({ task, today }: { task: Task; today: string }) {
         {formatDeadline(task)}
         {overdue ? " (overdue)" : ""}
       </span>
+      {task.estimated_minutes ? <span className="mc-chip">About {task.estimated_minutes} min</span> : null}
     </div>
   );
 }
@@ -220,6 +221,24 @@ function TaskMenu({ task }: { task: Task }) {
         <DropdownMenu.Content className="mc-menu" align="end" sideOffset={4}>
           <DropdownMenu.Item className="mc-menu-item" onSelect={() => openAssistant({ mode: "help_me_start", taskId: task.id, autoSend: true })}>
             <Sparkles size={16} aria-hidden="true" /> Help me start
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            className="mc-menu-item"
+            onSelect={() => openAssistant({ mode: "chat", taskId: task.id, autoSend: true, message: `Turn "${task.title}" into a clear plan.` })}
+          >
+            <ListChecks size={16} aria-hidden="true" /> Make a clear plan
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            className="mc-menu-item"
+            onSelect={() => openAssistant({ mode: "help_me_start", taskId: task.id, autoSend: true, message: `"${task.title}" feels too big. Could you break it down?` })}
+          >
+            <Minimize2 size={16} aria-hidden="true" /> Break this down
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            className="mc-menu-item"
+            onSelect={() => openAssistant({ mode: "missing_information", taskId: task.id, autoSend: true, message: `What is missing from "${task.title}"? Draft a question I can edit and send.` })}
+          >
+            <MessageCircleQuestion size={16} aria-hidden="true" /> Draft a clarifying question
           </DropdownMenu.Item>
           <DropdownMenu.Item className="mc-menu-item" onSelect={() => openMissingInfo(task.id)}>
             <CircleHelp size={16} aria-hidden="true" /> Missing information

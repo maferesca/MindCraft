@@ -17,15 +17,15 @@ export function TaskEditorDialog() {
   const { tasks } = useWorkspaceData();
   if (!taskEditor) return null;
   const task = taskEditor.taskId ? tasks.find((item) => item.id === taskEditor.taskId) ?? null : null;
-  return <TaskEditorForm key={task?.id ?? "new"} task={task} onClose={closeTaskEditor} />;
+  return <TaskEditorForm key={task?.id ?? "new"} task={task} initialTitle={taskEditor.title} onClose={closeTaskEditor} />;
 }
 
-function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => void }) {
+function TaskEditorForm({ task, initialTitle = "", onClose }: { task: Task | null; initialTitle?: string; onClose: () => void }) {
   const { createTask, updateTask, deleteTask, restoreTask, ensureProject, projects, steps, addStep, updateStep, deleteStep } = useWorkspaceData();
   const { announce, notify } = useNotify();
   const projectName = projects.find((project) => project.id === task?.project_id)?.name ?? "";
   const [values, setValues] = useState({
-    title: task?.title ?? "",
+    title: task?.title ?? initialTitle.slice(0, 200),
     description: task?.description ?? "",
     expected_result: task?.expected_result ?? "",
     due_date: task?.due_date ?? "",
@@ -33,6 +33,7 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
     project: projectName,
     assignee: task?.assignee ?? "",
     priority: task?.priority ?? "",
+    estimated_minutes: task?.estimated_minutes ? String(task.estimated_minutes) : "",
     source_link: task?.source_link ?? "",
     status: task?.status ?? "todo",
   });
@@ -45,9 +46,13 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const { project, ...fields } = values;
+    const { project, estimated_minutes, ...fields } = values;
+    const minutes = estimated_minutes.trim() ? Number(estimated_minutes) : null;
+    // Sent only when it changes, so a database without the column keeps working.
+    const estimate = minutes === (task?.estimated_minutes ?? null) ? {} : { estimated_minutes: minutes };
     const parsed = taskInputSchema.safeParse({
       ...fields,
+      ...estimate,
       due_date: values.due_date || null,
       due_time: values.due_date && values.due_time ? values.due_time : null,
       priority: values.priority || null,
@@ -121,6 +126,7 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
             </option>
           ))}
         </SelectField>
+        <TextField label="Estimated minutes" optional type="number" min={1} max={600} step={1} value={values.estimated_minutes} error={errors.estimated_minutes} onChange={set("estimated_minutes")} />
         <TextField label="Project" optional list="task-project-options" value={values.project} maxLength={120} onChange={set("project")} />
         <datalist id="task-project-options">
           {projects.map((project) => (

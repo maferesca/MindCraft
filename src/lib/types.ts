@@ -25,6 +25,8 @@ export interface Task {
   assignee: string | null;
   priority: TaskPriority | null;
   source_link: string | null;
+  // Absent on a database that has not run the task estimates migration yet.
+  estimated_minutes?: number | null;
   status: TaskStatus;
   created_at: string;
   updated_at: string;

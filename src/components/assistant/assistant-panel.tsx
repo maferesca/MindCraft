@@ -1,10 +1,11 @@
 "use client";
 
 import { DropdownMenu } from "radix-ui";
-import { Loader2, MessageCircle, MoreHorizontal, RotateCcw, Send, X } from "lucide-react";
+import { Loader2, MessageCircle, MoreHorizontal, Plus, RotateCcw, Send, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { askAssistant } from "@/lib/ai/client";
 import { proposalSchema, type Proposal } from "@/lib/schemas";
+import { findNamedTask } from "@/lib/task-plan";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI, type AssistantMode } from "../providers/workspace-ui";
 import { IconButton } from "../ui/icon-button";
@@ -63,7 +64,7 @@ export function AssistantButton() {
 // and Missing information, with a single saved conversation.
 export function AssistantPanel() {
   const { messages, profile, tasks, appendMessage, clearChat } = useWorkspaceData();
-  const { assistantOpen, assistantRequest, consumeAssistantRequest, closeAssistant, openSettings } = useWorkspaceUI();
+  const { assistantOpen, assistantRequest, consumeAssistantRequest, closeAssistant, openSettings, openTaskEditor } = useWorkspaceUI();
   const buildContext = useAssistantContext();
   const [input, setInput] = useLocalDraft("assistant");
   const [mode, setMode] = useState<AssistantMode>("chat");
@@ -97,7 +98,8 @@ export function AssistantPanel() {
       let exchange = unsavedReplyRef.current;
       if (!exchange || exchange.text !== content || exchange.mode !== sendMode || exchange.taskId !== sendTaskId) {
         const history = messages.slice(-10).map((message) => ({ role: message.role, content: message.content }));
-        const result = await askAssistant([...history, { role: "user", content }], buildContext(sendMode, sendTaskId, [content]));
+        const contextTaskId = sendTaskId ?? findNamedTask(content, tasks)?.id ?? null;
+        const result = await askAssistant([...history, { role: "user", content }], buildContext(sendMode, contextTaskId, [content]));
         if (!result.ok) {
           setError({ message: result.message, text: content, rateLimited: result.code === "rate_limited" });
           setInput((current) => current || content);
@@ -270,9 +272,14 @@ export function AssistantPanel() {
                 <p className="mc-hint">Your message is kept below.</p>
               </>
             )}
-            <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={() => send(error.text)}>
-              <RotateCcw size={14} aria-hidden="true" /> Try again
-            </button>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm" onClick={() => send(error.text)}>
+                <RotateCcw size={14} aria-hidden="true" /> Try again
+              </button>
+              <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={() => openTaskEditor(null, error.text)}>
+                <Plus size={14} aria-hidden="true" /> Add a task myself
+              </button>
+            </div>
           </div>
         ) : null}
       </div>

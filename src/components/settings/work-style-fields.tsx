@@ -3,7 +3,7 @@
 import { START_HELP_LABELS, type Preferences } from "@/lib/preferences";
 import { Segmented } from "./appearance-fields";
 
-type Field = "planningStyle" | "focusTime" | "startHelp" | "workMinutes" | "responseDetail";
+type Field = "planningStyle" | "taskPresentation" | "focusTime" | "startHelp" | "workMinutes" | "responseDetail";
 
 const ALL_FIELDS: Field[] = ["planningStyle", "focusTime", "startHelp", "workMinutes", "responseDetail"];
 
@@ -24,6 +24,17 @@ export function WorkStyleFields({ value, onChange, fields = ALL_FIELDS }: { valu
             value={value.planningStyle}
             options={[["one_step", "One step at a time"], ["short_list", "A short list"], ["full_overview", "The full overview"]]}
             onChange={(next) => onChange({ planningStyle: next as Preferences["planningStyle"] })}
+          />
+        </div>
+      ) : null}
+      {show("taskPresentation") ? (
+        <div>
+          <p className="mc-label">How should the assistant present tasks?</p>
+          <Segmented
+            label="How should the assistant present tasks?"
+            value={value.taskPresentation}
+            options={[["not_set", "No preference"], ["checklist", "As a checklist"], ["short_text", "In short paragraphs"]]}
+            onChange={(next) => onChange({ taskPresentation: next as Preferences["taskPresentation"] })}
           />
         </div>
       ) : null}

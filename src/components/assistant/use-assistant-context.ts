@@ -28,6 +28,7 @@ export function useAssistantContext() {
               title: task.title,
               description: task.description,
               expected_result: task.expected_result,
+              estimated_minutes: task.estimated_minutes ?? null,
               due_date: task.due_date,
               priority: task.priority,
               status: task.status,
@@ -39,10 +40,12 @@ export function useAssistantContext() {
           .slice(0, 30)
           .map((item) => ({ id: item.id, title: item.title, status: item.status, due_date: item.due_date })),
         visibleBlocks: blocks.filter((block) => !block.hidden).map((block) => block.block_type),
+        hiddenBlocks: blocks.filter((block) => block.hidden).map((block) => block.block_type),
         preferences: {
           responseDetail: preferences.responseDetail,
           language: preferences.language,
           planningStyle: preferences.planningStyle,
+          taskPresentation: preferences.taskPresentation,
           focusTime: preferences.focusTime,
           startHelp: preferences.startHelp,
           focusMinutes: preferences.workMinutes,

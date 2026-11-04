@@ -278,6 +278,7 @@ function AiSection() {
           onChange={(value) => updatePreferences({ responseDetail: value as Preferences["responseDetail"] })}
         />
       </div>
+      <WorkStyleFields value={preferences} onChange={updatePreferences} fields={["planningStyle", "taskPresentation", "workMinutes"]} />
       <SelectField label="Assistant language" value={preferences.language} onChange={(event) => updatePreferences({ language: event.target.value })}>
         <option value="auto">Same as my message</option>
         <option value="English">English</option>
@@ -288,6 +289,21 @@ function AiSection() {
         <option value="French">French</option>
         <option value="Portuguese">Portuguese</option>
       </SelectField>
+
+      <div>
+        <button
+          type="button"
+          className="mc-btn mc-btn-secondary self-start"
+          onClick={() => {
+            const { responseDetail, planningStyle, taskPresentation, focusTime, startHelp, workMinutes, language } = DEFAULT_PREFERENCES;
+            updatePreferences({ responseDetail, planningStyle, taskPresentation, focusTime, startHelp, workMinutes, language });
+            announce("Assistant preferences cleared.");
+          }}
+        >
+          Clear my assistant preferences
+        </button>
+        <p className="mc-hint mt-1">Your name is in Profile, where you can change or remove it.</p>
+      </div>
 
       <section className="rounded-xl border border-border p-4">
         <h3 className="font-bold">What is sent to the AI provider</h3>
@@ -300,8 +316,8 @@ function AiSection() {
           <li>your display name, so the assistant can call you by it</li>
           <li>the selected task (title, description, expected result, deadline, priority, status, steps)</li>
           <li>the titles, status, and deadlines of your other open tasks</li>
-          <li>which block types are in your workspace</li>
-          <li>your response detail, language, planning style, and how you said you like to work</li>
+          <li>which block types are in your workspace, including hidden ones</li>
+          <li>your response detail, language, planning style, task presentation, session length, and how you said you like to work</li>
         </ul>
         <p className="mt-2">
           Notes, calendar events, your email, and your other settings are not sent. Voice recordings are sent once to be turned into text and are

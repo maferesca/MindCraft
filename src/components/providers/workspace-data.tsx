@@ -2,15 +2,17 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { cacheAppearance } from "@/lib/appearance-cache";
+import { blockPlacement } from "@/lib/block-capabilities";
 import { BLOCK_DEFINITIONS, GRID_COLUMNS, findFreePosition, sizeFor } from "@/lib/blocks";
 import { clearSessionData } from "@/lib/clear-session-data";
 import { createLocalRepository } from "@/lib/data/local-repository";
-import type { Repository, Row, TableName } from "@/lib/data/repository";
+import { RepositoryError, type Repository, type Row, type TableName } from "@/lib/data/repository";
 import { createSupabaseRepository } from "@/lib/data/supabase-repository";
 import { browserTimezone } from "@/lib/dates";
 import { DEFAULT_PREFERENCES, applyPreferencesToDocument, normalizePreferences, type Preferences } from "@/lib/preferences";
 import { proposalSchema, type Proposal, type TaskInput } from "@/lib/schemas";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { proposalRecordId } from "@/lib/task-plan";
 import type {
   BlockType,
   CalendarEvent,
@@ -100,14 +102,15 @@ interface WorkspaceData {
   deleteEvent: (id: string) => Promise<void>;
 
   saveLayout: (draft: WorkspaceBlock[]) => Promise<boolean>;
-  addBlocks: (types: Array<{ type: BlockType; size?: { w: number; h: number } }>) => Promise<void>;
+  addBlocks: (types: Array<{ type: BlockType; size?: { w: number; h: number }; config?: Record<string, unknown> }>) => Promise<void>;
   updateBlockConfig: (id: string, config: Record<string, unknown>) => Promise<void>;
   resetLayout: () => Promise<void>;
 
   appendMessage: (role: ChatMessage["role"], content: string, proposal?: unknown) => Promise<ChatMessage | null>;
   clearChat: () => Promise<void>;
 
-  applyProposal: (proposal: Proposal) => Promise<string>;
+  // The key identifies this proposal, so applying it again never adds a second copy.
+  applyProposal: (proposal: Proposal, key?: string) => Promise<string>;
   signOut: () => Promise<void>;
 }
 
@@ -659,12 +662,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
   // Adds blocks directly (used by confirmed proposals and quick-add outside Creative Mode).
   const addBlocks = useCallback(
-    async (types: Array<{ type: BlockType; size?: { w: number; h: number } }>) => {
+    async (types: Array<{ type: BlockType; size?: { w: number; h: number }; config?: Record<string, unknown> }>) => {
       if (!workspace) return;
       const occupiedLg: GridPosition[] = blocks.filter((block) => !block.hidden && block.layouts.lg).map((block) => block.layouts.lg!);
       const created: WorkspaceBlock[] = [];
       try {
-        for (const { type, size } of types) {
+        for (const { type, size, config } of types) {
           const lgSize = size ?? sizeFor(type, "lg");
           const lg = findFreePosition(occupiedLg, Math.min(lgSize.w, GRID_COLUMNS.lg), lgSize.h, GRID_COLUMNS.lg);
           occupiedLg.push(lg);
@@ -673,7 +676,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
               workspace_id: workspace.id,
               block_type: type,
               title: null,
-              config: {},
+              config: config ?? {},
               layouts: { lg },
               mobile_order: 0,
               hidden: false,
@@ -771,12 +774,103 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   // decides what is allowed (known task ids, block types, sizes, preference values).
   // ---------------------------------------------------------------------------
 
+  // Every record of a plan has a deterministic id. If the work was already saved, or
+  // a retry follows a partial failure, the database rejects only the existing rows.
+  const applyTaskPlan = useCallback(
+    async (plan: Extract<Proposal, { type: "task_plan" }>, key: string) => {
+      const repo = requireRepo(repoRef);
+      const insertOnce = async <T,>(table: TableName, row: Row): Promise<T | null> => {
+        try {
+          return await repo.insert<T>(table, row);
+        } catch (error) {
+          if (error instanceof RepositoryError && error.code === "23505") return null;
+          throw error;
+        }
+      };
+      const { task: draft } = plan;
+      const existing = plan.task_id ? tasks.find((task) => task.id === plan.task_id) : null;
+      if (plan.task_id && !existing) throw new Error("That task no longer exists.");
+      const taskId = existing?.id ?? (await proposalRecordId(key));
+      let skippedEstimate = false;
+      let alreadySaved = false;
+
+      if (existing) {
+        // Instructions and filled fields are never overwritten.
+        const patch: Partial<Task> = {};
+        if (!existing.expected_result && draft.deliverable) patch.expected_result = draft.deliverable;
+        if (existing.estimated_minutes == null && draft.estimated_minutes) patch.estimated_minutes = draft.estimated_minutes;
+        if (Object.keys(patch).length) await updateTask(existing.id, patch);
+      } else {
+        const row: Row = {
+          id: taskId,
+          status: "todo",
+          title: draft.title,
+          expected_result: draft.deliverable || null,
+          due_date: draft.due_date ?? null,
+          priority: draft.priority ?? null,
+        };
+        let created: Task | null;
+        try {
+          created = await insertOnce<Task>("tasks", draft.estimated_minutes ? { ...row, estimated_minutes: draft.estimated_minutes } : row);
+        } catch (error) {
+          // The app can deploy before the estimates migration runs. The task still matters more.
+          if (!(error instanceof RepositoryError) || !["42703", "PGRST204"].includes(error.code ?? "")) throw error;
+          skippedEstimate = true;
+          created = await insertOnce<Task>("tasks", row);
+        }
+        if (created) {
+          const task = created;
+          setTasks((current) => (current.some((item) => item.id === task.id) ? current : [...current, task]));
+        } else {
+          alreadySaved = true;
+          setTasks(await repo.list<Task>("tasks"));
+        }
+      }
+
+      const taskSteps = steps.filter((step) => step.task_id === taskId);
+      if (!taskSteps.some((step) => step.text === draft.first_action)) {
+        // Placed first, so it becomes the current step in the Task guide and Focus Mode.
+        const position = taskSteps.reduce((lowest, step) => Math.min(lowest, step.position - 1), 0);
+        const step = await insertOnce<TaskStep>("task_steps", { id: await proposalRecordId(`${key}:step`), task_id: taskId, text: draft.first_action, position, done: false });
+        if (step) setSteps((current) => [...current, step]);
+      }
+      if (draft.done_when && !reviewItems.some((item) => item.task_id === taskId && item.text === draft.done_when)) {
+        const position = reviewItems.filter((item) => item.task_id === taskId).length;
+        const item = await insertOnce<ReviewItem>("task_review_items", { id: await proposalRecordId(`${key}:review`), task_id: taskId, text: draft.done_when, position, done: false });
+        if (item) setReviewItems((current) => [...current, item]);
+      }
+
+      const type = plan.recommended_block?.block_type;
+      if (type) {
+        const config = type === "next_step" ? { taskId } : undefined;
+        const placement = blockPlacement(blocks, type);
+        if (placement === "available") await addBlocks([{ type, config }]);
+        if (placement === "hidden") {
+          const hiddenBlock = blocks.find((block) => block.block_type === type);
+          if (hiddenBlock) {
+            await saveLayout(blocks.map((block) => (block.id === hiddenBlock.id ? { ...block, hidden: false } : block)));
+            if (config) await updateBlockConfig(hiddenBlock.id, config);
+          }
+        }
+        if (placement === "placed" && config) {
+          const placed = blocks.find((block) => block.block_type === type && !block.hidden);
+          if (placed) await updateBlockConfig(placed.id, config);
+        }
+      }
+      const saved = existing ? "Plan added to the task." : alreadySaved ? "This task was already saved." : "Task saved.";
+      return skippedEstimate ? `${saved} The estimated time was not saved because the database needs an update.` : saved;
+    },
+    [tasks, steps, reviewItems, blocks, updateTask, addBlocks, saveLayout, updateBlockConfig],
+  );
+
   const applyProposal = useCallback(
-    async (candidate: Proposal): Promise<string> => {
+    async (candidate: Proposal, key?: string): Promise<string> => {
       const parsed = proposalSchema.safeParse(candidate);
       if (!parsed.success) throw new Error("This suggestion is no longer valid.");
       const proposal = parsed.data;
       switch (proposal.type) {
+        case "task_plan":
+          return applyTaskPlan(proposal, key ?? crypto.randomUUID());
         case "create_tasks": {
           let count = 0;
           for (const task of proposal.tasks) {
@@ -822,7 +916,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           return "Draft ready to copy.";
       }
     },
-    [tasks, createTask, addStep, addBlocks, updatePreferences],
+    [tasks, applyTaskPlan, createTask, addStep, addBlocks, updatePreferences],
   );
 
   const signOut = useCallback(async () => {

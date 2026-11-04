@@ -173,5 +173,14 @@ check("Anonymous requests see no tasks", await (async () => {
   }
 })());
 
+// Task estimates and repeated proposal ids.
+const planId = "33333333-3333-4333-8333-333333333333";
+const planInsert = `insert into tasks (id, user_id, title, estimated_minutes) values ('${planId}', '${alice}', 'Plan task', 30) returning id`;
+await as(alice, planInsert);
+check("A task keeps its estimated minutes", (await as(alice, `select estimated_minutes from tasks where id = '${planId}'`)).rows[0]?.estimated_minutes === 30);
+check("Confirming a proposal twice cannot create a second task", await fails(alice, planInsert));
+check("An estimate outside 1 to 600 minutes is rejected", await fails(alice, `insert into tasks (user_id, title, estimated_minutes) values ('${alice}', 'Too long', 601)`));
+check("Bob cannot see Alice's plan task", (await as(bob, `select id from tasks where id = '${planId}'`)).rows.length === 0);
+
 console.log(failures === 0 ? "\nAll RLS checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

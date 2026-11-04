@@ -1,3 +1,4 @@
+import { BLOCK_TYPES } from "../preferences";
 import { proposalSchema, type AssistantContext, type Proposal } from "../schemas";
 
 // Words that show the user actually stated a date or a priority. If none
@@ -12,6 +13,37 @@ export function stripInlineMarkdown(text: string): string {
   return text.replace(/\*\*([^*\n]+)\*\*/g, "$1").replace(/__([^_\n]+)__/g, "$1").replace(/`([^`\n]+)`/g, "$1");
 }
 
+// Repairs what can be repaired, so one bad optional field does not lose a useful
+// plan. A task id is kept only if it is the selected task, the one allowed destination.
+function repairTaskPlan(candidate: Record<string, unknown>, context: AssistantContext) {
+  const blockType = (value: unknown) => (value as { block_type?: string } | null | undefined)?.block_type;
+  const isValid = (value: unknown) => (BLOCK_TYPES as readonly unknown[]).includes(blockType(value));
+  const plan = { ...candidate };
+  if (!isValid(plan.recommended_block)) delete plan.recommended_block;
+  if (!isValid(plan.alternative_block) || !plan.recommended_block || blockType(plan.alternative_block) === blockType(plan.recommended_block)) {
+    delete plan.alternative_block;
+  }
+  if (plan.task_id && plan.task_id !== context.task?.id) return null;
+  if (plan.task && typeof plan.task === "object") {
+    const task = { ...(plan.task as Record<string, unknown>) };
+    const minutes = task.estimated_minutes;
+    if (typeof minutes !== "number" || !Number.isInteger(minutes) || minutes < 1 || minutes > 600) delete task.estimated_minutes;
+    for (const field of ["deliverable", "done_when"]) if (!task[field]) delete task[field];
+    plan.task = task;
+  }
+  return plan;
+}
+
+const WORD = /[\p{L}\p{N}]{4,}/gu;
+
+// A field only counts as stated if most of its words came from the person or
+// the selected task. The model cannot promote its own suggestion to a requirement.
+function supportedBySource(text: string | undefined, source: string) {
+  const words = text?.toLowerCase().match(WORD);
+  if (!words?.length) return false;
+  return words.filter((word) => source.includes(word)).length / words.length >= 0.6;
+}
+
 export function sanitizeProposals(raw: unknown, context: AssistantContext, userText: string): Proposal[] {
   if (!Array.isArray(raw)) return [];
   const knownTaskIds = new Set([context.task?.id, ...(context.otherTasks ?? []).map((task) => task.id)].filter(Boolean));
@@ -21,7 +53,11 @@ export function sanitizeProposals(raw: unknown, context: AssistantContext, userT
 
   for (const candidate of raw.slice(0, 10)) {
     if (result.length >= 3) break;
-    const parsed = proposalSchema.safeParse(candidate);
+    const repaired =
+      candidate && typeof candidate === "object" && (candidate as { type?: unknown }).type === "task_plan"
+        ? repairTaskPlan(candidate as Record<string, unknown>, context)
+        : candidate;
+    const parsed = proposalSchema.safeParse(repaired);
     if (!parsed.success) continue;
     const proposal = parsed.data;
 
@@ -36,6 +72,15 @@ export function sanitizeProposals(raw: unknown, context: AssistantContext, userT
         if (!statedPriority) delete clean.priority;
         return clean;
       });
+    }
+    if (proposal.type === "task_plan") {
+      // A plan always has a first action and a deliverable to follow, which is what
+      // the Task guide shows. With no reason from the model, the card shows its purpose.
+      if (!proposal.recommended_block && !proposal.block_limitation) proposal.recommended_block = { block_type: "next_step" };
+      if (!statedDate || !isRealDate(proposal.task.due_date)) delete proposal.task.due_date;
+      if (!statedPriority) delete proposal.task.priority;
+      const source = [userText, context.task?.title, context.task?.description, context.task?.expected_result].filter(Boolean).join("\n").toLowerCase();
+      proposal.stated_by_user = proposal.stated_by_user?.filter((field) => supportedBySource(proposal.task[field], source));
     }
     result.push(proposal);
   }

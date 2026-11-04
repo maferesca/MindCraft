@@ -4,6 +4,17 @@ import type { Streak } from "../types";
 // Postgres (protected by RLS); the demo implementation keeps fictional data
 // in this browser's localStorage so the app can be explored without an account.
 
+// Keeps the database error code, so callers can tell a duplicate from a failure.
+export class RepositoryError extends Error {
+  constructor(
+    message: string,
+    public code?: string,
+  ) {
+    super(message);
+    this.name = "RepositoryError";
+  }
+}
+
 export type TableName =
   | "profiles"
   | "preferences"

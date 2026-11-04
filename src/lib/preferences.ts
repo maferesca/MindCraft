@@ -51,6 +51,7 @@ export const preferencesSchema = z.object({
   responseDetail: z.enum(["brief", "balanced", "detailed"]),
   language: z.string().max(40),
   planningStyle: z.enum(["one_step", "short_list", "full_overview"]),
+  taskPresentation: z.enum(["not_set", "checklist", "short_text"]),
   focusTime: z.enum(["not_set", "morning", "afternoon", "evening", "varies"]),
   startHelp: z.array(z.enum(START_HELP_OPTIONS)).max(5),
   workMinutes: z.number().int().min(1).max(600),
@@ -77,6 +78,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   responseDetail: "brief",
   language: "auto",
   planningStyle: "short_list",
+  taskPresentation: "not_set",
   focusTime: "not_set",
   startHelp: [],
   workMinutes: 25,
@@ -146,4 +148,7 @@ export const PREFERENCE_LABELS: Partial<Record<keyof Preferences, string>> = {
   reducedMotion: "Motion",
   sounds: "Sounds",
   responseDetail: "Assistant response detail",
+  planningStyle: "How you like to see your work",
+  taskPresentation: "How the assistant presents tasks",
+  workMinutes: "Work session length in minutes",
 };

@@ -5,6 +5,9 @@ import { assistantResultSchema } from "../schemas";
 
 export type AiCallResult<T> = { ok: true; data: T } | { ok: false; code: string; message: string };
 
+// The server stops at its provider timeouts. This also bounds a stalled connection.
+const REQUEST_TIMEOUT_MS = 45_000;
+
 const OFFLINE = { ok: false as const, code: "offline", message: "You're offline. Your text is kept here; try again when you're connected." };
 
 async function readError(response: Response) {
@@ -26,13 +29,17 @@ export async function askAssistant(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: messages.slice(-12), context }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) return { ok: false, ...(await readError(response)) };
     // Validate again in the browser: never trust a response shape blindly.
     const parsed = assistantResultSchema.safeParse(await response.json());
     if (!parsed.success) return { ok: false, code: "invalid_output", message: "The assistant's answer could not be read." };
     return { ok: true, data: parsed.data };
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      return { ok: false, code: "timeout", message: "The assistant took too long. Your text is kept here." };
+    }
     return { ok: false, code: "network", message: "The assistant could not be reached. Your text is kept here." };
   }
 }

@@ -4,7 +4,7 @@ import { browserTimezone, localDateString, nextStreak } from "../dates";
 import { buildSampleData } from "../demo/sample-data";
 import type { Streak } from "../types";
 import { DEMO_COOKIE } from "../supabase/config";
-import { keyColumn, type Repository, type Row, type TableName } from "./repository";
+import { RepositoryError, keyColumn, type Repository, type Row, type TableName } from "./repository";
 
 const STORAGE_KEY = "mindcraft-demo-v1";
 const DEMO_USER_ID = "00000000-0000-4000-8000-000000000001";
@@ -83,6 +83,8 @@ export function createLocalRepository(): Repository | null {
     async insert<T>(table: TableName, row: Row) {
       const now = new Date().toISOString();
       const record = { id: crypto.randomUUID(), created_at: now, updated_at: now, ...row, user_id: DEMO_USER_ID };
+      // Mirrors the primary key, so the demo also rejects a second copy.
+      if (rows(table).some((item) => item.id === record.id)) throw new RepositoryError(`Could not save to ${table}: duplicate id`, "23505");
       rows(table).push(record);
       save(database);
       return structuredClone(record) as T;
