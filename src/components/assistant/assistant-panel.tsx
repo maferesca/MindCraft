@@ -9,6 +9,7 @@ import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI, type AssistantMode } from "../providers/workspace-ui";
 import { IconButton } from "../ui/icon-button";
 import { ProposalCard } from "./proposal-card";
+import { RateLimitNotice } from "./rate-limit-notice";
 import { useAssistantContext } from "./use-assistant-context";
 import { useLocalDraft } from "./use-local-draft";
 import { VoiceRecorder } from "./voice-recorder";
@@ -61,7 +62,7 @@ export function AssistantPanel() {
     proposal: unknown;
     userSaved: boolean;
   } | null>(null);
-  const [error, setError] = useState<{ message: string; text: string } | null>(null);
+  const [error, setError] = useState<{ message: string; text: string; rateLimited?: boolean } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const task = taskId ? tasks.find((item) => item.id === taskId) : null;
@@ -79,7 +80,7 @@ export function AssistantPanel() {
         const history = messages.slice(-10).map((message) => ({ role: message.role, content: message.content }));
         const result = await askAssistant([...history, { role: "user", content }], buildContext(sendMode, sendTaskId, [content]));
         if (!result.ok) {
-          setError({ message: result.message, text: content });
+          setError({ message: result.message, text: content, rateLimited: result.code === "rate_limited" });
           setInput((current) => current || content);
           return;
         }
@@ -237,8 +238,14 @@ export function AssistantPanel() {
         ) : null}
         {error ? (
           <div className="mt-3 rounded-xl border-2 border-danger p-3" role="alert">
-            <p className="font-semibold text-danger">{error.message}</p>
-            <p className="mc-hint">Your message is kept below.</p>
+            {error.rateLimited ? (
+              <RateLimitNotice messageKept={input.trim() === error.text} />
+            ) : (
+              <>
+                <p className="font-semibold text-danger">{error.message}</p>
+                <p className="mc-hint">Your message is kept below.</p>
+              </>
+            )}
             <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={() => send(error.text)}>
               <RotateCcw size={14} aria-hidden="true" /> Try again
             </button>

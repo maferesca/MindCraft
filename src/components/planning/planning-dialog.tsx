@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { askAssistant } from "@/lib/ai/client";
 import type { AssistantResult } from "@/lib/schemas";
 import { ProposalCard } from "../assistant/proposal-card";
+import { RateLimitNotice } from "../assistant/rate-limit-notice";
 import { useAssistantContext } from "../assistant/use-assistant-context";
 import { useLocalDraft } from "../assistant/use-local-draft";
 import { VoiceRecorder } from "../assistant/voice-recorder";
@@ -12,17 +13,23 @@ import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
 import { Modal } from "../ui/modal";
 
-// Daily planning: describe today by text or voice, then review suggestions.
-// Unspecified deadlines, priorities, and times stay empty.
+// Daily planning: describe today by text or voice. The first reply joins the shared
+// conversation, and planning continues in the assistant panel, where suggestions
+// are reviewed. Unspecified deadlines, priorities, and times stay empty.
 export function PlanningDialog() {
-  const { planningOpen, planningPrefill, closePlanning, openTaskEditor } = useWorkspaceUI();
+  const { planningOpen, planningPrefill, closePlanning, openTaskEditor, openAssistant } = useWorkspaceUI();
   const { messages, appendMessage } = useWorkspaceData();
   const buildContext = useAssistantContext();
   const [text, setText] = useLocalDraft("planning");
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; rateLimited: boolean } | null>(null);
   const [result, setResult] = useState<{ data: AssistantResult; key: string } | null>(null);
   const autoSubmitted = useRef<string | null>(null);
+  const openRef = useRef(planningOpen);
+
+  useEffect(() => {
+    openRef.current = planningOpen;
+  }, [planningOpen]);
 
   async function submit(content: string) {
     const message = content.trim();
@@ -34,14 +41,23 @@ export function PlanningDialog() {
     const response = await askAssistant([...history, { role: "user", content: message }], buildContext("planning", null, [message]));
     setPending(false);
     if (!response.ok) {
-      setError(response.message);
+      setError({ message: response.message, rateLimited: response.code === "rate_limited" });
       return;
     }
-    await appendMessage("user", message);
+    const savedUser = await appendMessage("user", message);
     const reply = response.data.question ? `${response.data.reply}\n\n${response.data.question}` : response.data.reply;
     const saved = await appendMessage("assistant", reply, response.data.proposals.length ? { proposals: response.data.proposals } : null);
-    setResult({ data: response.data, key: saved?.id ?? `planning-${Date.now()}` });
     setText("");
+    if (savedUser && saved) {
+      // Skipped if the dialog was closed while waiting: the reply is in the chat.
+      if (openRef.current) {
+        closePlanning();
+        openAssistant({ mode: "planning" });
+      }
+      return;
+    }
+    // The chat could not save the reply, so show it here rather than lose it.
+    setResult({ data: response.data, key: saved?.id ?? `planning-${Date.now()}` });
   }
 
   useEffect(() => {
@@ -101,8 +117,14 @@ export function PlanningDialog() {
 
       {error ? (
         <div className="mt-4 rounded-xl border-2 border-danger p-3" role="alert">
-          <p className="font-semibold text-danger">{error}</p>
-          <p className="mc-hint">Your text is kept above.</p>
+          {error.rateLimited ? (
+            <RateLimitNotice messageKept={Boolean(text.trim())} />
+          ) : (
+            <>
+              <p className="font-semibold text-danger">{error.message}</p>
+              <p className="mc-hint">Your text is kept above.</p>
+            </>
+          )}
           <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={() => submit(text)}>
             <RotateCcw size={14} aria-hidden="true" /> Try again
           </button>
