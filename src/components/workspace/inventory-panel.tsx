@@ -1,11 +1,11 @@
 "use client";
 
-import { Eye, FolderOpen, MessageSquareText, Plus, X } from "lucide-react";
+import { Eye, Plus, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { BLOCK_CATALOG, type CatalogItem } from "@/lib/block-catalog";
 import { BLOCK_DEFINITIONS } from "@/lib/blocks";
 import type { BlockType, WorkspaceBlock } from "@/lib/types";
-import { BlockTile, TileShell } from "../blocks/block-icon";
+import { BlockTile } from "../blocks/block-icon";
 import { IconButton } from "../ui/icon-button";
 import { BlockPreview } from "./block-preview";
 
@@ -92,36 +92,22 @@ export function InventoryPanel({ hiddenBlocks, dragging, onAdd, onRestore, onDra
   );
 }
 
-function CardTile({ item }: { item: CatalogItem }) {
-  if (item.blockType) return <BlockTile type={item.blockType} size={36} />;
-  const Icon = item.id === "resources" ? FolderOpen : MessageSquareText;
-  return (
-    <TileShell color="var(--mc-cube-c)" size={36}>
-      <Icon size={17} aria-hidden="true" />
-    </TileShell>
-  );
-}
-
 function InventoryCard({ item, onAdd, onDragTypeChange }: { item: CatalogItem; onAdd: InventoryPanelProps["onAdd"]; onDragTypeChange: InventoryPanelProps["onDragTypeChange"] }) {
   const type = item.blockType;
   return (
     <article
-      draggable={Boolean(type)}
+      draggable
       onDragStart={(event) => {
-        if (!type) return;
         event.dataTransfer.setData("text/plain", type);
         event.dataTransfer.effectAllowed = "copy";
         onDragTypeChange(type);
       }}
       onDragEnd={() => onDragTypeChange(null)}
-      className={`flex h-full flex-col gap-2 rounded-xl border bg-surface p-3 ${
-        type ? "cursor-grab border-border hover:border-border-strong active:cursor-grabbing" : "border-dashed border-border-strong"
-      }`}
+      className="flex h-full cursor-grab flex-col gap-2 rounded-xl border border-border bg-surface p-3 hover:border-border-strong active:cursor-grabbing"
     >
       <div className="flex items-center gap-2">
-        <CardTile item={item} />
+        <BlockTile type={type} size={36} />
         <h4 className="min-w-0 flex-1 font-bold leading-tight">{item.name}</h4>
-        {type ? null : <span className="mc-chip shrink-0">Not available yet</span>}
       </div>
       <p className="text-sm leading-snug">{item.description}</p>
       <BlockPreview id={item.id} />
@@ -138,9 +124,8 @@ function InventoryCard({ item, onAdd, onDragTypeChange }: { item: CatalogItem; o
       <button
         type="button"
         className="mc-btn mc-btn-secondary mc-btn-sm mt-auto"
-        disabled={!type}
-        aria-label={type ? `Add ${item.name} block` : `${item.name} is not available yet`}
-        onClick={() => type && onAdd(type)}
+        aria-label={`Add ${item.name} block`}
+        onClick={() => onAdd(type)}
       >
         <Plus size={14} aria-hidden="true" /> Add block
       </button>

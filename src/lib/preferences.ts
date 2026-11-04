@@ -1,7 +1,20 @@
 import { z } from "zod";
 import { THEMES, THEME_IDS, resolveTokens, type AccentId, type ThemeId } from "./themes";
 
-export const BLOCK_TYPES = ["task_list", "calendar", "next_step", "focus_timer", "notes"] as const;
+export const BLOCK_TYPES = ["task_list", "calendar", "next_step", "focus_timer", "notes", "resources", "check_in"] as const;
+
+// A running timer is stored as timestamps, so refreshing or switching tabs never slows it.
+export const timerSessionSchema = z.object({
+  mode: z.enum(["countdown", "stopwatch"]),
+  phase: z.enum(["work", "break"]),
+  runState: z.enum(["idle", "running", "paused", "finished"]),
+  startedAt: z.number().nullable(),
+  accumulatedMs: z.number().min(0),
+  targetMs: z.number().min(0),
+  endedBy: z.enum(["user", "zero"]).nullable(),
+  taskId: z.string().uuid().nullable(),
+});
+export type TimerSession = z.infer<typeof timerSessionSchema>;
 
 export const FONT_OPTIONS = {
   system: { label: "System default", stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
@@ -25,12 +38,13 @@ export const preferencesSchema = z.object({
   density: z.enum(["compact", "comfortable", "spacious"]),
   reducedMotion: z.enum(["system", "on", "off"]),
   sounds: z.boolean(),
-  preferredTools: z.array(z.enum(BLOCK_TYPES)).max(5),
+  preferredTools: z.array(z.enum(BLOCK_TYPES)).max(7),
   responseDetail: z.enum(["brief", "balanced", "detailed"]),
   language: z.string().max(40),
   planningStyle: z.enum(["one_step", "short_list", "full_overview"]),
-  workMinutes: z.number().int().min(5).max(120),
-  breakMinutes: z.number().int().min(1).max(60),
+  workMinutes: z.number().int().min(1).max(600),
+  breakMinutes: z.number().int().min(1).max(120),
+  timer: timerSessionSchema,
   showStreak: z.boolean(),
   dailyWelcome: z.boolean(),
 });
@@ -54,6 +68,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   planningStyle: "short_list",
   workMinutes: 25,
   breakMinutes: 5,
+  timer: { mode: "countdown", phase: "work", runState: "idle", startedAt: null, accumulatedMs: 0, targetMs: 0, endedBy: null, taskId: null },
   showStreak: true,
   dailyWelcome: true,
 };

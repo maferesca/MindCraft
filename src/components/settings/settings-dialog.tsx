@@ -158,10 +158,10 @@ function WorkspaceSection() {
         <TextField
           label="Focus session length (minutes)"
           type="number"
-          min={5}
-          max={120}
+          min={1}
+          max={600}
           value={preferences.workMinutes}
-          onChange={(event) => Number(event.target.value) >= 5 && updatePreferences({ workMinutes: Number(event.target.value) })}
+          onChange={(event) => Number(event.target.value) >= 1 && updatePreferences({ workMinutes: Math.round(Number(event.target.value)) })}
         />
         <TextField
           label="Break length (minutes)"

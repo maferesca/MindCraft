@@ -7,7 +7,6 @@ import { BLOCK_DEFINITIONS } from "@/lib/blocks";
 import { SIZE_LABELS, currentSizePreset, type SizePreset } from "@/lib/layout-edit";
 import type { Breakpoint, WorkspaceBlock } from "@/lib/types";
 import { BlockIcon, blockHeaderBackground } from "../blocks/block-icon";
-import { useWorkspaceData } from "../providers/workspace-data";
 import { IconButton } from "../ui/icon-button";
 
 export interface CreativeActions {
@@ -57,37 +56,10 @@ export function BlockFrame({ block, breakpoint, creative, children }: BlockFrame
         <h3 id={headingId} className={`min-w-0 flex-1 truncate font-bold ${creative && breakpoint !== "sm" ? "mc-drag-handle cursor-grab" : ""}`}>
           {title}
         </h3>
-        {creative ? <CreativeControls block={block} breakpoint={breakpoint} actions={creative} title={title} /> : <DisplayOptions block={block} title={title} />}
+        {creative ? <CreativeControls block={block} breakpoint={breakpoint} actions={creative} title={title} /> : null}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto p-[var(--space)]">{children}</div>
     </section>
-  );
-}
-
-function DisplayOptions({ block, title }: { block: WorkspaceBlock; title: string }) {
-  const { updateBlockConfig } = useWorkspaceData();
-  const hasViewOption = block.block_type === "task_list";
-  if (!hasViewOption) return null;
-  const expanded = block.config.view === "expanded";
-  return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger className="mc-icon-btn mc-icon-btn-sm" aria-label={`Display options for ${title}`} title="Display options">
-        <MoreHorizontal size={18} aria-hidden="true" />
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content className="mc-menu" align="end" sideOffset={4}>
-          <DropdownMenu.Label className="mc-hint px-2 py-1">Display</DropdownMenu.Label>
-          <DropdownMenu.RadioGroup value={expanded ? "expanded" : "compact"} onValueChange={(value) => updateBlockConfig(block.id, { view: value })}>
-            <DropdownMenu.RadioItem value="compact" className="mc-menu-item">
-              <span className="inline-block w-4" aria-hidden="true">{expanded ? "" : "✓"}</span> Compact
-            </DropdownMenu.RadioItem>
-            <DropdownMenu.RadioItem value="expanded" className="mc-menu-item">
-              <span className="inline-block w-4" aria-hidden="true">{expanded ? "✓" : ""}</span> Expanded
-            </DropdownMenu.RadioItem>
-          </DropdownMenu.RadioGroup>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
   );
 }
 

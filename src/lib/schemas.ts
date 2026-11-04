@@ -21,9 +21,12 @@ export const taskInputSchema = z.object({
   description: optionalText(4000),
   expected_result: optionalText(1000),
   due_date: isoDate.nullable().optional(),
+  due_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "Use a valid time").nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).nullable().optional(),
   source_link: optionalText(1000),
-  status: z.enum(["todo", "in_progress", "blocked", "done"]).optional(),
+  project_id: z.string().uuid().nullable().optional(),
+  assignee: optionalText(120),
+  status: z.enum(["todo", "in_progress", "done"]).optional(),
 });
 export type TaskInput = z.infer<typeof taskInputSchema>;
 
@@ -33,6 +36,36 @@ export const noteInputSchema = z.object({
   title: optionalText(200),
   body: z.string().max(20000),
   task_id: z.string().uuid().nullable().optional(),
+});
+
+const httpUrl = z
+  .string()
+  .trim()
+  .max(2000)
+  .refine((value) => {
+    try {
+      return ["http:", "https:"].includes(new URL(value).protocol);
+    } catch {
+      return false;
+    }
+  }, "Use a full link starting with http:// or https://");
+
+export const resourceInputSchema = z.object({
+  name: z.string().trim().min(1, "Give the link a name").max(200),
+  url: httpUrl,
+  description: optionalText(1000),
+  task_id: z.string().uuid().nullable().optional(),
+  project_id: z.string().uuid().nullable().optional(),
+});
+
+export const progressInputSchema = z
+  .object({ task_id: z.string().uuid().nullable(), completed_text: optionalText(4000), next_text: optionalText(4000) })
+  .refine((value) => Boolean(value.completed_text || value.next_text), { message: "Fill in Completed or Next", path: ["completed_text"] });
+
+export const helpInputSchema = z.object({
+  task_id: z.string().uuid().nullable(),
+  blocking: z.string().trim().min(1, "Describe what is blocking you").max(4000),
+  support: z.string().trim().min(1, "Describe the support you need").max(4000),
 });
 
 export const eventInputSchema = z

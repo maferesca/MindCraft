@@ -22,7 +22,7 @@ interface History {
 }
 
 export function WorkspaceView() {
-  const { blocks, workspace, saveLayout } = useWorkspaceData();
+  const { blocks, workspace, saveLayout, draftConfigs } = useWorkspaceData();
   const { creativeMode, setCreativeMode } = useWorkspaceUI();
   const { announce, notify } = useNotify();
   const { width, containerRef, mounted } = useContainerWidth();
@@ -52,7 +52,11 @@ export function WorkspaceView() {
   }, []);
 
   const draft = history?.present ?? blocks;
-  const shown = creativeMode ? draft : blocks;
+  // Block settings save immediately, so a layout draft always shows the current ones.
+  const savedConfig = new Map(blocks.map((block) => [block.id, block.config]));
+  const shown = creativeMode
+    ? draft.map((block) => ({ ...block, config: savedConfig.get(block.id) ?? { ...block.config, ...draftConfigs[block.id] } }))
+    : blocks;
   const visibleCount = shown.filter((block) => !block.hidden).length;
   const base = { user_id: workspace?.user_id ?? "", workspace_id: workspace?.id ?? "" };
 

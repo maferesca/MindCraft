@@ -1,49 +1,41 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import type { TimerSession } from "@/lib/preferences";
+import * as timer from "@/lib/timer";
 import { useNotify } from "../ui/notifications";
 import { useWorkspaceData } from "./workspace-data";
 
-type Phase = "work" | "break";
-type RunState = "idle" | "running" | "paused" | "finished";
-
-interface TimerState {
-  // Minutes chosen in the Timer block; null means "use the preference".
-  customMinutes: number | null;
-  phase: Phase;
-  runState: RunState;
+interface TimerContextValue {
+  session: TimerSession;
+  // What the clock shows: time left on a countdown, time passed on a stopwatch.
+  displayMs: number;
+  elapsedMs: number;
   durationMs: number;
-  remainingMs: number;
-  includeBreak: boolean;
-}
-
-interface TimerContextValue extends TimerState {
+  setMode: (mode: TimerSession["mode"]) => void;
   setDurationMinutes: (minutes: number) => void;
-  setIncludeBreak: (value: boolean) => void;
+  setBreakMinutes: (minutes: number) => void;
+  setTaskId: (taskId: string | null) => void;
   start: () => void;
   pause: () => void;
   resume: () => void;
+  finish: () => void;
   reset: () => void;
-  end: () => void;
   startBreak: () => void;
 }
 
 const TimerContext = createContext<TimerContextValue | null>(null);
 
-// One shared timer so the Timer block and Focus Mode show the same session.
-// It never starts by itself, and finishing a session never completes a task.
+// One shared session for every Focus timer block and Focus Mode. It is saved with
+// preferences on each change of state, so it survives a refresh. It never starts by
+// itself, and it never changes a task.
 export function TimerProvider({ children }: { children: ReactNode }) {
-  const { preferences } = useWorkspaceData();
+  const { preferences, updatePreferences } = useWorkspaceData();
   const { announce } = useNotify();
-  const [state, setState] = useState<TimerState>(() => ({
-    customMinutes: null,
-    phase: "work",
-    runState: "idle",
-    durationMs: preferences.workMinutes * 60_000,
-    remainingMs: preferences.workMinutes * 60_000,
-    includeBreak: true,
-  }));
-  const endsAtRef = useRef<number | null>(null);
+  const session = preferences.timer;
+  const [now, setNow] = useState(() => Date.now());
+
+  const save = useCallback((next: TimerSession) => updatePreferences({ timer: next }), [updatePreferences]);
 
   const playChime = useCallback(() => {
     if (!preferences.sounds) return;
@@ -63,63 +55,75 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   }, [preferences.sounds]);
 
   useEffect(() => {
-    if (state.runState !== "running") return;
-    const interval = window.setInterval(() => {
-      const remaining = Math.max(0, (endsAtRef.current ?? Date.now()) - Date.now());
-      if (remaining > 0) {
-        setState((current) => ({ ...current, remainingMs: remaining }));
-        return;
-      }
-      endsAtRef.current = null;
+    if (session.runState !== "running") return;
+    const tick = () => {
+      const current = Date.now();
+      setNow(current);
+      if (!timer.hasExpired(session, current)) return;
       playChime();
-      announce(
-        state.phase === "work" ? "Focus session finished. Your task stays as it is until you change it." : "Break finished.",
-      );
-      setState((current) => ({ ...current, remainingMs: 0, runState: "finished" }));
-    }, 500);
-    return () => window.clearInterval(interval);
-  }, [state.runState, state.phase, announce, playChime]);
+      announce(session.phase === "work" ? "Session finished." : "Break finished.");
+      save(timer.finish(session, current, "zero"));
+    };
+    tick();
+    const interval = window.setInterval(tick, 500);
+    // Timers are throttled in background tabs, so catch up on return.
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [session, announce, playChime, save]);
 
-  // While idle, the session length follows preferences unless the user picked a custom length.
-  const idleWorkMs = (state.customMinutes ?? preferences.workMinutes) * 60_000;
-  const current = state.runState === "idle" && state.phase === "work" ? { ...state, durationMs: idleWorkMs, remainingMs: idleWorkMs } : state;
+  const durationMs = preferences.workMinutes * 60_000;
+  const idle = session.runState === "idle";
+  const elapsed = timer.elapsedMs(session, now);
+  const displayMs = timer.isCountdown(session) ? (idle ? durationMs : timer.remainingMs(session, now)) : elapsed;
 
   const value: TimerContextValue = {
-    ...current,
-    setDurationMinutes: (minutes) => {
-      const customMinutes = Math.min(180, Math.max(1, Math.round(minutes)));
-      setState((previous) => (previous.runState === "idle" ? { ...previous, customMinutes } : previous));
+    session,
+    displayMs,
+    elapsedMs: elapsed,
+    durationMs,
+    // Mode and duration can only change between sessions.
+    setMode: (mode) => {
+      if (idle) save({ ...session, mode });
     },
-    setIncludeBreak: (includeBreak) => setState((current) => ({ ...current, includeBreak })),
+    setDurationMinutes: (minutes) => {
+      if (idle && minutes >= 1) updatePreferences({ workMinutes: Math.min(600, Math.round(minutes)) });
+    },
+    setBreakMinutes: (minutes) => {
+      if (minutes >= 1) updatePreferences({ breakMinutes: Math.min(120, Math.round(minutes)) });
+    },
+    setTaskId: (taskId) => save({ ...session, taskId }),
     start: () => {
-      endsAtRef.current = Date.now() + current.durationMs;
-      setState((previous) => ({ ...previous, runState: "running", durationMs: current.durationMs, remainingMs: current.durationMs }));
-      announce(state.phase === "work" ? "Focus session started." : "Break started.");
+      const current = Date.now();
+      setNow(current);
+      save(timer.start(session, current, session.mode === "countdown" ? durationMs : 0));
+      announce("Session started.");
     },
     pause: () => {
-      setState((current) => ({ ...current, runState: "paused", remainingMs: Math.max(0, (endsAtRef.current ?? Date.now()) - Date.now()) }));
-      endsAtRef.current = null;
+      const current = Date.now();
+      setNow(current);
+      save(timer.pause(session, current));
       announce("Timer paused.");
     },
     resume: () => {
-      endsAtRef.current = Date.now() + state.remainingMs;
-      setState((current) => ({ ...current, runState: "running" }));
+      const current = Date.now();
+      setNow(current);
+      save(timer.resume(session, current));
       announce("Timer resumed.");
     },
-    reset: () => {
-      endsAtRef.current = null;
-      setState((current) => ({ ...current, runState: "idle", remainingMs: current.durationMs }));
+    finish: () => {
+      const current = Date.now();
+      setNow(current);
+      save(timer.finish(session, current, "user"));
+      announce("Session finished.");
     },
-    end: () => {
-      endsAtRef.current = null;
-      const workMs = preferences.workMinutes * 60_000;
-      setState((previous) => ({ ...previous, phase: "work", runState: "idle", durationMs: workMs, remainingMs: workMs }));
-      announce("Timer ended.");
-    },
+    reset: () => save(timer.reset(session)),
     startBreak: () => {
-      const breakMs = preferences.breakMinutes * 60_000;
-      endsAtRef.current = Date.now() + breakMs;
-      setState((current) => ({ ...current, phase: "break", runState: "running", durationMs: breakMs, remainingMs: breakMs }));
+      const current = Date.now();
+      setNow(current);
+      save(timer.start(session, current, preferences.breakMinutes * 60_000, "break"));
       announce("Break started.");
     },
   };
@@ -131,11 +135,4 @@ export function useTimer() {
   const value = useContext(TimerContext);
   if (!value) throw new Error("useTimer must be used inside TimerProvider");
   return value;
-}
-
-export function formatDuration(ms: number) {
-  const totalSeconds = Math.ceil(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }

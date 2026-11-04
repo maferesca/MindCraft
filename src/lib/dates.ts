@@ -35,6 +35,56 @@ export function nextStreak(previous: Streak | null, today: string): Streak {
   return { current_streak: current, best_streak: Math.max(previous.best_streak, current), last_visit_date: today };
 }
 
+// The wall-clock date and time of an instant in a timezone.
+export function zonedParts(instant: string | Date, timezone: string): { date: string; time: string } {
+  const at = new Date(instant);
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false }).format(at);
+  return { date: localDateString(timezone, at), time: time.startsWith("24") ? `00${time.slice(2)}` : time };
+}
+
+function timezoneOffsetMs(utcMs: number, timezone: string) {
+  const { date, time } = zonedParts(new Date(utcMs), timezone);
+  const [year, month, day] = date.split("-").map(Number);
+  const [hours, minutes] = time.split(":").map(Number);
+  return Date.UTC(year, month - 1, day, hours, minutes) - Math.floor(utcMs / 60_000) * 60_000;
+}
+
+// The instant for a wall-clock date and time in a timezone. The offset is checked
+// twice because the first guess can land on the other side of a clock change.
+export function zonedToIso(date: string, time: string, timezone: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const [hours, minutes] = time.split(":").map(Number);
+  const wallClock = Date.UTC(year, month - 1, day, hours, minutes);
+  let utc = wallClock - timezoneOffsetMs(wallClock, timezone);
+  utc = wallClock - timezoneOffsetMs(utc, timezone);
+  return new Date(utc).toISOString();
+}
+
+// 0 is Sunday. Works on the calendar date alone, independent of any timezone.
+export function weekdayOf(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+export function startOfWeekDate(date: string, firstDay: 0 | 1) {
+  return addDaysToDateString(date, -((weekdayOf(date) - firstDay + 7) % 7));
+}
+
+export function dateRange(start: string, count: number) {
+  return Array.from({ length: count }, (_, index) => addDaysToDateString(start, index));
+}
+
+export function daysInMonth(date: string) {
+  const [year, month] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+export function addMonthsToDateString(date: string, months: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  const first = new Date(Date.UTC(year, month - 1 + months, 1)).toISOString().slice(0, 10);
+  return `${first.slice(0, 8)}${String(Math.min(day, daysInMonth(first))).padStart(2, "0")}`;
+}
+
 // Minutes since midnight for "HH:mm" or "HH:mm:ss".
 export function minutesFromTime(value: string | null): number | null {
   if (!value) return null;

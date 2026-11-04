@@ -12,20 +12,20 @@ export const BLOCK_DEFINITIONS: Record<BlockType, BlockDefinition> = {
   task_list: {
     type: "task_list",
     label: "Tasks",
-    defaultSize: { w: 4, h: 7 },
-    minSize: { w: 3, h: 4 },
+    defaultSize: { w: 5, h: 8 },
+    minSize: { w: 3, h: 5 },
   },
   calendar: {
     type: "calendar",
     label: "Calendar",
-    defaultSize: { w: 5, h: 7 },
-    minSize: { w: 4, h: 5 },
+    defaultSize: { w: 6, h: 9 },
+    minSize: { w: 4, h: 6 },
   },
   next_step: {
     type: "next_step",
     label: "Task guide",
-    defaultSize: { w: 3, h: 5 },
-    minSize: { w: 3, h: 4 },
+    defaultSize: { w: 4, h: 9 },
+    minSize: { w: 3, h: 5 },
   },
   focus_timer: {
     type: "focus_timer",
@@ -39,9 +39,21 @@ export const BLOCK_DEFINITIONS: Record<BlockType, BlockDefinition> = {
     defaultSize: { w: 4, h: 6 },
     minSize: { w: 3, h: 4 },
   },
+  resources: {
+    type: "resources",
+    label: "Resources",
+    defaultSize: { w: 4, h: 6 },
+    minSize: { w: 3, h: 4 },
+  },
+  check_in: {
+    type: "check_in",
+    label: "Check-in",
+    defaultSize: { w: 4, h: 6 },
+    minSize: { w: 3, h: 4 },
+  },
 };
 
-export const BLOCK_ORDER: BlockType[] = ["task_list", "next_step", "calendar", "focus_timer", "notes"];
+export const BLOCK_ORDER: BlockType[] = ["task_list", "calendar", "next_step", "focus_timer", "notes", "resources", "check_in"];
 
 export const GRID_COLUMNS: Record<Breakpoint, number> = { lg: 12, md: 6 };
 export const ROW_HEIGHT = 48;

@@ -3,45 +3,14 @@
 import { Check, CircleHelp, Minimize2, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
 import { stepTextSchema } from "@/lib/schemas";
-import { currentStep, openTasks, stepsForTask } from "@/lib/task-helpers";
-import type { Task, TaskStep, WorkspaceBlock } from "@/lib/types";
+import { currentStep, stepsForTask } from "@/lib/task-helpers";
+import type { Task, TaskStep } from "@/lib/types";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
 import { useNotify } from "../ui/notifications";
 
-// Shows one task and its current action. Works fully without AI.
-export function NextStepBlock({ block }: { block: WorkspaceBlock }) {
-  const { tasks, updateBlockConfig } = useWorkspaceData();
-  const taskId = (block.config.taskId as string | undefined) ?? null;
-  const task = tasks.find((item) => item.id === taskId) ?? null;
-  const candidates = openTasks(tasks);
-
-  return (
-    <div className="flex h-full flex-col gap-3">
-      <div>
-        <label htmlFor={`next-step-task-${block.id}`} className="mc-label text-sm">
-          Task
-        </label>
-        <select
-          id={`next-step-task-${block.id}`}
-          className="mc-input"
-          value={task?.id ?? ""}
-          onChange={(event) => updateBlockConfig(block.id, { taskId: event.target.value || null })}
-        >
-          <option value="">Choose a task…</option>
-          {candidates.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.title}
-            </option>
-          ))}
-          {task && task.status === "done" ? <option value={task.id}>{task.title} (done)</option> : null}
-        </select>
-      </div>
-      {task ? <CurrentStep task={task} /> : candidates.length ? null : <p className="mc-hint">Add a task first.</p>}
-    </div>
-  );
-}
-
+// Compact current-step view used in Focus Mode. It reads the same step records as
+// the Task guide block, and completing a step never completes the task.
 export function CurrentStep({ task, compact = false }: { task: Task; compact?: boolean }) {
   const { steps, addStep, updateStep } = useWorkspaceData();
   const { openAssistant, openMissingInfo } = useWorkspaceUI();
@@ -142,7 +111,7 @@ export function CurrentStep({ task, compact = false }: { task: Task; compact?: b
             <Plus size={16} aria-hidden="true" /> {step ? "Add step" : "Write a step"}
           </button>
           <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={() => openMissingInfo(task.id)}>
-            <CircleHelp size={16} aria-hidden="true" /> I&apos;m blocked
+            <CircleHelp size={16} aria-hidden="true" /> Missing information
           </button>
         </div>
       ) : null}

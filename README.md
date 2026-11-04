@@ -31,8 +31,8 @@ Then open http://localhost:3000.
 ### Connecting Supabase (real accounts)
 
 1. Create a project at https://supabase.com.
-2. Apply the migration. Either:
-   - paste `supabase/migrations/20261102000000_initial_schema.sql` into the SQL editor and run it, or
+2. Apply both migrations, in order. Either:
+   - paste each file from `supabase/migrations/` into the SQL editor and run it, oldest first, or
    - use the Supabase CLI: `supabase link` then `supabase db push`.
 3. In **Authentication > URL Configuration**:
    - set **Site URL** to your app URL (for example `http://localhost:3000`)
@@ -90,7 +90,7 @@ src/proxy.ts: refreshes the session cookie and redirects signed-out visitors
 | --- | --- |
 | `supabase/migrations/` | Schema, RLS policies, triggers, streak function |
 | `src/app/` | Routes: auth pages, `/welcome` (setup), `/workspace`, API route handlers, manifest, icons |
-| `src/components/blocks/` | Task list, Calendar, Next step, Timer, Notes |
+| `src/components/blocks/` | Tasks, Calendar, Task guide, Focus timer, Notes, Resources, Check-in |
 | `src/components/workspace/` | Grid, block frame, Creative Mode, inventory, empty state, search |
 | `src/components/assistant/`, `planning/` | Assistant panel, proposals, voice recorder, Plan my day, daily welcome card |
 | `src/components/providers/` | Data store, screen state, shared timer |
@@ -122,11 +122,13 @@ Notes, calendar events, email, and other settings are never sent. A voice record
 - Compact header with profile menu (Profile, Appearance and reading, Workspace preferences, Notifications, AI and privacy, Account, Sign out), workspace name, an optional streak, and three modes. There is no sidebar.
 - **Creative Mode:** compact toolbar with numbered slots, plus an inventory panel organized into Planning, Focus, and Support. Drag from either one or click to add. Arrow keys, Enter, and number keys work in the toolbar. Also includes header-only drag handles, resizing with minimum sizes, snap grid, Save, Cancel, Undo, Redo (also Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y), hide or remove with an explanation, and non-drag controls (Move earlier or later, size presets, move left, right, up, or down).
 - **Blocks:**
-  - **Task List:** quick add, full editor, status, filters, compact or expanded view, delete with Undo, Help me start, and Missing information with an editable draft message to copy.
-  - **Calendar:** day, week, and month views. Internal events and work sessions, deadlines shown separately from scheduled sessions, events linkable to tasks. It is labelled as the Mindcraft calendar.
-  - **Next step:** one action at a time; edit, replace, complete, Make this smaller, or I'm blocked. Works without AI. Completing a step never completes the task.
-  - **Timer:** Pomodoro preset or custom length. Start, pause, resume, reset, and end, with an optional break. Sound is off by default, and motion respects your settings.
-  - **Notes:** quick capture, optional title, autosave, task links, and delete with Undo.
+  - **Tasks:** list or board, status dropdown and drag between columns, All, Today, Upcoming, Overdue, and Completed filters, and sorting by deadline, priority, or title. The board's All filter also shows done tasks, so its Done column works.
+  - **Calendar:** month, week, and day views plus an agenda, using the profile timezone. Date-only deadlines appear all day and timed deadlines at their time. Events and work sessions are edited separately from deadlines, which change only through **Edit deadline** in task details.
+  - **Task guide:** task details, ordered steps in One step or All steps view, a separate "Before submitting" checklist, linked resources, and **Mark task done**. Neither checklist completes a task.
+  - **Focus timer:** countdown or stopwatch based on timestamps, so a session survives a refresh. Optional break and sound. One shared session is used by every timer block and Focus Mode.
+  - **Notes:** plain text, bullets, and checklists, pinning, autosave status, and links to one task or project.
+  - **Resources:** saved links with list or card views, favorites, and filters.
+  - **Check-in:** progress updates and help requests saved as private drafts. Help requests have Open, Waiting, and Resolved statuses and follow-ups.
 - Focus Mode: selected task, expected result, current step, resources (source link and linked notes), an optional timer, Help me start, and I'm blocked. Leaving it restores the saved workspace untouched.
 - Assistant panel (side panel on desktop, full screen on phones) with proposals you can Apply, Edit, or Dismiss. Errors offer Retry, and your text is kept.
 - Daily welcome card (once per local day, dismissible) with text, voice, and four quick choices. Plan my day covers text and voice with an editable transcript.
@@ -144,8 +146,11 @@ Notes, calendar events, email, and other settings are never sent. A voice record
 - Offline editing and sync. Edits made while offline are not queued.
 - Using AI to interpret free-form setup answers. The assistant can suggest preference changes in chat, but the setup screen does not use AI.
 - Self-service account deletion. This needs a privileged server function.
-- Daily Schedule, Upcoming, routines with recurrence, and a streak block.
+- Daily Schedule, Upcoming, routines with recurrence, a streak block, and a Timeline view.
 - Calendar sync with Google or Outlook.
+- Sharing Check-in entries. There are no team members, managers, or a team view yet, so Share stays disabled and entries remain private drafts.
+- File uploads in Resources. There is no file storage, so only links can be added.
+- Dragging work sessions on the calendar. Sessions move through their edit form.
 - A shared rate limiter across server instances. The current limiter is in memory and protects only a single instance.
 
 ### Simulated or limited
@@ -165,8 +170,8 @@ Run on 2026-11-02, with theme checks updated on 2026-11-03:
 | TypeScript (`tsc --noEmit`) | Passed, 0 errors |
 | ESLint | Passed, 0 problems |
 | Production build (`next build`) | Passed |
-| Unit tests (Vitest) | 13 of 13 passed |
-| RLS isolation (PGlite, two accounts) | 20 of 20 checks passed |
+| Unit tests (Vitest) | 36 of 36 passed |
+| RLS isolation (PGlite, two accounts) | 36 of 36 checks passed |
 | Theme contrast (17 themes × 6 accent options) | All text pairs ≥ 4.5:1 and all control borders and focus indicators ≥ 3:1, also under simulated protanopia, deuteranopia, and tritanopia |
 
 **Manual browser walkthrough (local demo, desktop 1366×860 and phone 375×812):** setup with live theme preview; empty workspace; adding blocks by pressing (no dragging); header drag; Undo, Redo, and Cancel restoring positions; Save surviving a reload; marking a step done without completing the task; completing a task updating Task List, Next step, and the calendar deadline; Focus Mode exit leaving the layout unchanged; removing the Task List block keeping all tasks; AI failure keeping the draft and changing no data; phone view in the desktop reading order with no horizontal scrolling; phone reordering through the bottom sheet; API returning 401 when signed out and 403 for the demo without opt-in.

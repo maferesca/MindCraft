@@ -66,7 +66,8 @@ export function WorkspaceGrid({ blocks, width, breakpoint, creative, draggingTyp
         gridConfig={{ cols, rowHeight: ROW_HEIGHT, margin: [MARGIN, MARGIN], containerPadding: [0, 0] }}
         dragConfig={{ enabled: creative, handle: ".mc-drag-handle", cancel: "input, textarea, select, button, a, [role='menuitem']" }}
         resizeConfig={{ enabled: creative, handles: ["se"] }}
-        dropConfig={{ enabled: creative, defaultItem: { w: dropSize.w, h: dropSize.h } }}
+        // Only blocks from the toolbar drop here; board cards keep their own drag and drop.
+        dropConfig={{ enabled: creative && draggingType !== null, defaultItem: { w: dropSize.w, h: dropSize.h } }}
         droppingItem={droppingItem}
         compactor={verticalCompactor}
         onDragStop={(next) => onLayoutCommit(next)}

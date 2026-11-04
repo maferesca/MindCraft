@@ -1,4 +1,4 @@
-import { CalendarDays, ListChecks, NotebookPen, SquareArrowRight, Timer } from "lucide-react";
+import { CalendarDays, FolderOpen, ListChecks, MessageSquareText, NotebookPen, SquareArrowRight, Timer } from "lucide-react";
 import type { ReactNode } from "react";
 import type { BlockType } from "@/lib/types";
 
@@ -8,6 +8,8 @@ const ICONS = {
   next_step: SquareArrowRight,
   focus_timer: Timer,
   notes: NotebookPen,
+  resources: FolderOpen,
+  check_in: MessageSquareText,
 } satisfies Record<BlockType, unknown>;
 
 const TILE_COLORS: Record<BlockType, string> = {
@@ -16,6 +18,8 @@ const TILE_COLORS: Record<BlockType, string> = {
   next_step: "var(--mc-cube-c)",
   focus_timer: "var(--mc-cube-b)",
   notes: "var(--mc-cube-a)",
+  resources: "var(--mc-cube-c)",
+  check_in: "var(--mc-cube-c)",
 };
 
 export function blockHeaderBackground(type: BlockType) {

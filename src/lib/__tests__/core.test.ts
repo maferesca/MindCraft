@@ -127,10 +127,8 @@ describe("assistant declines (acceptance check 9)", () => {
 });
 
 describe("block catalog", () => {
-  it("offers every block type exactly once, and marks the rest as unavailable", () => {
-    const available = CATALOG_ITEMS.flatMap((item) => (item.blockType ? [item.blockType] : []));
-    expect([...available].sort()).toEqual([...BLOCK_ORDER].sort());
-    expect(CATALOG_ITEMS.filter((item) => !item.blockType).map((item) => item.id)).toEqual(["resources", "check-in"]);
+  it("offers every block type exactly once", () => {
+    expect(CATALOG_ITEMS.map((item) => item.blockType).sort()).toEqual([...BLOCK_ORDER].sort());
   });
 });
 

@@ -1,14 +1,36 @@
 import { format, parseISO } from "date-fns";
-import type { Task, TaskStatus, TaskStep } from "./types";
+import type { Task, TaskPriority, TaskStatus, TaskStep } from "./types";
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: "To do",
   in_progress: "In progress",
-  blocked: "Blocked",
   done: "Done",
 };
 
-export const PRIORITY_LABELS = { low: "Low priority", medium: "Medium priority", high: "High priority" } as const;
+export const PRIORITY_LABELS: Record<TaskPriority | "none", string> = { none: "None", low: "Low", medium: "Medium", high: "High" };
+
+const PRIORITY_RANK: Record<TaskPriority | "none", number> = { high: 0, medium: 1, low: 2, none: 3 };
+
+export type TaskFilter = "all" | "today" | "upcoming" | "overdue" | "completed";
+export type TaskSort = "deadline" | "priority" | "title";
+
+export const TASK_FILTER_LABELS: Record<TaskFilter, string> = {
+  all: "All",
+  today: "Today",
+  upcoming: "Upcoming",
+  overdue: "Overdue",
+  completed: "Completed",
+};
+
+export function timeLabel(time: string) {
+  return time.slice(0, 5);
+}
+
+export function formatDeadline(task: Pick<Task, "due_date" | "due_time">) {
+  if (!task.due_date) return "No deadline";
+  const day = format(parseISO(task.due_date), "EEE d MMM");
+  return task.due_time ? `${day}, ${timeLabel(task.due_time)}` : day;
+}
 
 export function formatDueDate(date: string) {
   return `Due ${format(parseISO(date), "EEE d MMM")}`;
@@ -18,7 +40,35 @@ export function isOverdue(task: Task, today: string) {
   return Boolean(task.due_date && task.status !== "done" && task.due_date < today);
 }
 
-export function stepsForTask(steps: TaskStep[], taskId: string) {
+export function filterTasks(tasks: Task[], filter: TaskFilter, today: string) {
+  return tasks.filter((task) => {
+    const open = task.status !== "done";
+    if (filter === "completed") return !open;
+    if (!open) return false;
+    if (filter === "today") return task.due_date === today;
+    if (filter === "upcoming") return Boolean(task.due_date && task.due_date > today);
+    if (filter === "overdue") return Boolean(task.due_date && task.due_date < today);
+    return true;
+  });
+}
+
+function deadlineKey(task: Task) {
+  // Tasks without a deadline sort after every dated task.
+  return task.due_date ? `${task.due_date} ${task.due_time ?? "99"}` : "9999";
+}
+
+export function sortTasks(tasks: Task[], sort: TaskSort) {
+  return [...tasks].sort((a, b) => {
+    if (sort === "title") return a.title.localeCompare(b.title);
+    if (sort === "priority") {
+      const difference = PRIORITY_RANK[a.priority ?? "none"] - PRIORITY_RANK[b.priority ?? "none"];
+      if (difference) return difference;
+    }
+    return deadlineKey(a).localeCompare(deadlineKey(b)) || a.title.localeCompare(b.title);
+  });
+}
+
+export function stepsForTask<T extends Pick<TaskStep, "task_id" | "position" | "created_at">>(steps: T[], taskId: string) {
   return steps.filter((step) => step.task_id === taskId).sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at));
 }
 
@@ -31,10 +81,30 @@ export function openTasks(tasks: Task[]) {
   return tasks.filter((task) => task.status !== "done");
 }
 
-// Draft built from a template, so a clarification message is available
-// without AI. The user edits and sends it through their own channel.
-export function clarificationTemplate(taskTitle: string, missing: string[], other: string) {
-  const items = [...missing.map((item) => item.toLowerCase()), other.trim()].filter(Boolean);
-  const asks = items.length ? items.join(", ") : "a few details";
-  return `Hi, I'm working on "${taskTitle}". Before I continue, could you help me with ${asks}? Thank you.`;
+export function stepProgressLabel(done: number, total: number) {
+  return total ? `${done} of ${total} steps completed` : "Add your first step";
+}
+
+// Note text stays plain text. Lines starting with "- [ ] " or "- [x] " are
+// checklist items that belong only to the note, and "- " lines are bullets.
+const CHECK_LINE = /^(\s*)- \[( |x|X)\] ?(.*)$/;
+
+export type NoteLine =
+  | { kind: "check"; text: string; checked: boolean }
+  | { kind: "bullet"; text: string }
+  | { kind: "text"; text: string };
+
+export function parseNoteLine(line: string): NoteLine {
+  const check = CHECK_LINE.exec(line);
+  if (check) return { kind: "check", text: check[3], checked: check[2].toLowerCase() === "x" };
+  if (/^\s*- /.test(line)) return { kind: "bullet", text: line.replace(/^\s*- /, "") };
+  return { kind: "text", text: line };
+}
+
+export function toggleNoteLine(body: string, index: number) {
+  const lines = body.split("\n");
+  const line = lines[index];
+  if (line === undefined) return body;
+  lines[index] = line.replace(/- \[( |x|X)\]/, (match) => (match === "- [ ]" ? "- [x]" : "- [ ]"));
+  return lines.join("\n");
 }

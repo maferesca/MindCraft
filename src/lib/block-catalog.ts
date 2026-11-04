@@ -1,12 +1,11 @@
 import type { BlockType } from "./types";
 
-// What the inventory shows. `blockType: null` marks a block that does not exist
-// yet: it appears for planning purposes but cannot be added. `options` lists only
-// what works today; anything still to build goes in `planned`.
+// What the inventory shows. `options` lists only what works today; anything
+// still to build goes in `planned`.
 export interface CatalogItem {
   id: string;
   name: string;
-  blockType: BlockType | null;
+  blockType: BlockType;
   description: string;
   options: string[];
   planned: string[];
@@ -28,15 +27,15 @@ export const BLOCK_CATALOG: CatalogCategory[] = [
         name: "Tasks",
         blockType: "task_list",
         description: "View and organize tasks, and set priorities.",
-        options: ["Compact or expanded list", "Filter by status or date"],
-        planned: ["Board view"],
+        options: ["List or board", "Filter by date or completion", "Sort by deadline, priority, or title"],
+        planned: [],
       },
       {
         id: "calendar",
         name: "Calendar",
         blockType: "calendar",
         description: "View deadlines, events, and scheduled work.",
-        options: ["Month grid", "Day or week agenda in rows"],
+        options: ["Month, week, or day", "Agenda in rows", "Filter by project or type"],
         planned: [],
       },
     ],
@@ -49,17 +48,17 @@ export const BLOCK_CATALOG: CatalogCategory[] = [
         id: "task-guide",
         name: "Task guide",
         blockType: "next_step",
-        description: "Work through a task one step at a time.",
-        options: ["One step at a time", "Edit, shrink, or add steps"],
-        planned: ["Goal, deliverable, and instructions", "Full checklist", "Final review checklist"],
+        description: "See a task's instructions, deliverable, steps, and review checklist.",
+        options: ["One step or all steps", "Before submitting checklist", "Linked resources"],
+        planned: [],
       },
       {
         id: "focus-timer",
         name: "Focus timer",
         blockType: "focus_timer",
-        description: "Run an adjustable countdown with optional breaks.",
-        options: ["Pomodoro or custom length", "Optional break", "Optional sound"],
-        planned: ["Stopwatch"],
+        description: "Use an adjustable countdown or stopwatch, with optional breaks and sound.",
+        options: ["Countdown or stopwatch", "Editable break", "Optional sound"],
+        planned: [],
       },
     ],
   },
@@ -71,25 +70,25 @@ export const BLOCK_CATALOG: CatalogCategory[] = [
         id: "notes",
         name: "Notes",
         blockType: "notes",
-        description: "Capture ideas and meeting notes.",
-        options: ["Quick capture", "Link a note to a task"],
-        planned: ["Personal checklists"],
+        description: "Capture ideas, meeting notes, and personal checklists.",
+        options: ["Bullets and checklists", "Pin notes", "Link to a task or project"],
+        planned: [],
       },
       {
         id: "resources",
         name: "Resources",
-        blockType: null,
-        description: "Keep useful links and supported files together, connected to tasks or projects.",
-        options: [],
-        planned: [],
+        blockType: "resources",
+        description: "Keep useful links together, connected to tasks or projects.",
+        options: ["List or cards", "Favorites", "Filter by project or task"],
+        planned: ["File uploads"],
       },
       {
         id: "check-in",
         name: "Check-in",
-        blockType: null,
-        description: "Share progress, explain blockers, or request support through short updates.",
-        options: [],
-        planned: [],
+        blockType: "check_in",
+        description: "Write progress updates and help requests as private drafts.",
+        options: ["Progress update", "I need help", "Open, Waiting, or Resolved"],
+        planned: ["Sharing with others"],
       },
     ],
   },

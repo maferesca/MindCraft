@@ -33,13 +33,17 @@ for (const file of readdirSync(migrationsDir).sort()) {
   await db.exec(readFileSync(join(migrationsDir, file), "utf8"));
 }
 
+// The first migration's tables get their grants from Supabase defaults. Later
+// migrations must grant their own, so this only covers the initial tables.
 await db.exec(`
   grant usage on schema public to authenticated;
-  grant select, insert, update, delete on all tables in schema public to authenticated;
+  grant select, insert, update, delete on public.profiles, public.preferences, public.notification_preferences,
+    public.workspaces, public.workspace_blocks, public.tasks, public.task_steps, public.notes, public.calendar_events,
+    public.conversations, public.messages, public.daily_activity, public.streaks to authenticated;
 `);
 
-const alice = "11111111-1111-1111-1111-111111111111";
-const bob = "22222222-2222-2222-2222-222222222222";
+const alice = "11111111-1111-4111-8111-111111111111";
+const bob = "22222222-2222-4222-8222-222222222222";
 await db.exec(`insert into auth.users (id, email) values
   ('${alice}', 'alice@example.test'), ('${bob}', 'bob@example.test');`);
 
@@ -96,6 +100,51 @@ check("Bob cannot add a block to Alice's workspace",
   await fails(bob, "insert into workspace_blocks (user_id, workspace_id, block_type) values ($1, $2, 'notes')", [bob, workspaceId]));
 check("Unknown block types are rejected",
   await fails(alice, "insert into workspace_blocks (user_id, workspace_id, block_type) values ($1, $2, 'script')", [alice, workspaceId]));
+
+// Second migration: projects, review checklists, resources, and check-ins.
+const aliceProject = (await as(alice, "insert into projects (user_id, name) values ($1, 'Launch') returning id", [alice])).rows[0].id;
+const reviewItem = await as(alice, "insert into task_review_items (user_id, task_id, text) values ($1, $2, 'Spell check') returning id", [alice, aliceTaskId]);
+const resource = await as(alice, "insert into resources (user_id, name, url, task_id) values ($1, 'Brief', 'https://example.test/brief', $2) returning id", [alice, aliceTaskId]);
+const checkIn = await as(alice, "insert into check_ins (user_id, kind, task_id, next_text) values ($1, 'progress', $2, 'Finish slides') returning id", [alice, aliceTaskId]);
+for (const table of ["projects", "task_review_items", "resources", "check_ins"]) {
+  check(`Bob cannot read Alice's ${table}`, (await as(bob, `select * from ${table}`)).rows.length === 0);
+}
+check("Bob cannot update Alice's resource", (await as(bob, "update resources set name = 'x' where id = $1 returning id", [resource.rows[0].id])).rows.length === 0);
+check("Bob cannot delete Alice's check-in", (await as(bob, "delete from check_ins where id = $1 returning id", [checkIn.rows[0].id])).rows.length === 0);
+check("Bob cannot link a resource to Alice's task",
+  await fails(bob, "insert into resources (user_id, name, url, task_id) values ($1, 'x', 'https://example.test', $2)", [bob, aliceTaskId]));
+check("Bob cannot put a task in Alice's project",
+  await fails(bob, "insert into tasks (user_id, title, project_id) values ($1, 'x', $2)", [bob, aliceProject]));
+check("Bob cannot add review items to Alice's task",
+  await fails(bob, "insert into task_review_items (user_id, task_id, text) values ($1, $2, 'x')", [bob, aliceTaskId]));
+check("Resources must use http or https",
+  await fails(alice, "insert into resources (user_id, name, url) values ($1, 'x', 'javascript:alert(1)')", [alice]));
+check("The old blocked status is rejected",
+  await fails(alice, "update tasks set status = 'blocked' where id = $1", [aliceTaskId]));
+check("A note cannot link to a task and a project",
+  await fails(alice, "insert into notes (user_id, body, task_id, project_id) values ($1, 'x', $2, $3)", [alice, aliceTaskId, aliceProject]));
+check("A progress update needs Completed or Next",
+  await fails(alice, "insert into check_ins (user_id, kind) values ($1, 'progress')", [alice]));
+check("A help request needs both written fields",
+  await fails(alice, "insert into check_ins (user_id, kind, blocking, help_status) values ($1, 'help', 'x', 'open')", [alice]));
+
+// Calendar sessions and blocks never change task content.
+await as(alice, "update tasks set due_date = '2026-12-01' where id = $1", [aliceTaskId]);
+const session = await as(alice,
+  "insert into calendar_events (user_id, title, kind, starts_at, ends_at, task_id) values ($1, 'Work session', 'work_session', '2026-11-20T10:00:00Z', '2026-11-20T11:00:00Z', $2) returning id",
+  [alice, aliceTaskId]);
+await as(alice, "update calendar_events set starts_at = '2026-11-21T10:00:00Z', ends_at = '2026-11-21T11:00:00Z' where id = $1", [session.rows[0].id]);
+await as(alice, "delete from calendar_events where id = $1", [session.rows[0].id]);
+const afterSession = await as(alice, "select due_date::text from tasks where id = $1", [aliceTaskId]);
+check("Moving and deleting a work session keeps the task and its deadline", afterSession.rows[0]?.due_date === "2026-12-01");
+const resourceBlock = await as(alice,
+  "insert into workspace_blocks (user_id, workspace_id, block_type) values ($1, $2, 'resources') returning id", [alice, workspaceId]);
+const checkInBlock = await as(alice,
+  "insert into workspace_blocks (user_id, workspace_id, block_type) values ($1, $2, 'check_in') returning id", [alice, workspaceId]);
+await as(alice, "delete from workspace_blocks where id = any($1::uuid[])", [[resourceBlock.rows[0].id, checkInBlock.rows[0].id]]);
+check("Removing Resources and Check-in blocks keeps their content",
+  (await as(alice, "select * from resources")).rows.length === 1 && (await as(alice, "select * from check_ins")).rows.length === 1);
+await as(alice, "delete from task_review_items where id = $1", [reviewItem.rows[0].id]);
 
 // Streak: one qualifying visit per local day.
 const first = await as(alice, "select * from record_workspace_visit()");
