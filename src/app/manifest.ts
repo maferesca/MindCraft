@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Mindcraft",
-    short_name: "Mindcraft",
+    name: "MindCraft",
+    short_name: "MindCraft",
     description: "A personal workspace you build your way.",
     start_url: "/workspace",
     scope: "/",
@@ -13,7 +13,7 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       { src: "/pwa-icon/192", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/pwa-icon/512", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "/pwa-icon/512", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: "/pwa-icon/maskable", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }

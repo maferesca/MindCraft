@@ -124,7 +124,7 @@ export const proposalSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("suggest_preferences"),
     summary: z.string().max(400),
-    changes: preferencesSchema.partial().refine((value) => Object.keys(value).length > 0),
+    changes: preferencesSchema.omit({ timer: true }).partial().refine((value) => Object.keys(value).length > 0),
   }),
   z.object({
     type: z.literal("draft_clarification"),
@@ -170,6 +170,9 @@ export const assistantContextSchema = z.object({
       responseDetail: z.enum(["brief", "balanced", "detailed"]),
       language: z.string().max(40),
       planningStyle: z.string().max(40),
+      focusTime: z.string().max(40).optional(),
+      startHelp: z.array(z.string().max(40)).max(5).optional(),
+      focusMinutes: z.number().int().min(1).max(600).optional(),
     })
     .optional(),
   declined: z.array(z.enum(["timer", "planning", "breaks", "assistance"])).max(4).optional(),

@@ -250,7 +250,7 @@ export function AppearancePreview() {
       </p>
       <div inert className="mc-card flex cursor-default select-none flex-col gap-3 p-[var(--space)]">
         <h3 className="text-lg font-bold">Sample heading</h3>
-        <p>This is how text will look across Mindcraft.</p>
+        <p>This is how text will look across MindCraft.</p>
         <div className="flex flex-wrap gap-1.5">
           <span className="mc-chip">Sample label</span>
           <span className="mc-chip">Sample date</span>

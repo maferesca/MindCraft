@@ -104,7 +104,7 @@ function ResourceItem({ resource, card, onEdit }: { resource: Resource; card: bo
           label={`Remove ${resource.name}`}
           icon={<Trash2 size={16} />}
           onClick={async () => {
-            if (!window.confirm(`Remove "${resource.name}" from Mindcraft? The linked page is not affected.`)) return;
+            if (!window.confirm(`Remove "${resource.name}" from MindCraft? The linked page is not affected.`)) return;
             if (await resourceActions.remove(resource.id)) announce("Resource removed.");
           }}
         />

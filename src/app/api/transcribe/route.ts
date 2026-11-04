@@ -7,7 +7,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/x-wav", "audio/aac"];
 
 // Turns a short voice recording into editable text. The audio is processed
-// in memory for this request only and is not stored by Mindcraft.
+// in memory for this request only and is not stored by MindCraft.
 export async function POST(request: Request) {
   const identity = await requireAiIdentity();
   if (identity instanceof NextResponse) return identity;

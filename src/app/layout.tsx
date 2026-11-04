@@ -7,8 +7,8 @@ import "./globals.css";
 
 const openSans = Open_Sans({ variable: "--font-open-sans", subsets: ["latin"], display: "swap" });
 
-// Optional reading fonts load only when someone selects them.
-const lexend = Lexend({ variable: "--font-lexend", subsets: ["latin"], display: "swap", preload: false });
+// Lexend is the default and brand font. The other reading fonts load only when selected.
+const lexend = Lexend({ variable: "--font-lexend", subsets: ["latin"], display: "swap" });
 const atkinson = Atkinson_Hyperlegible({ variable: "--font-atkinson", subsets: ["latin"], weight: ["400", "700"], display: "swap", preload: false });
 const comicNeue = Comic_Neue({ variable: "--font-comic-neue", subsets: ["latin"], weight: ["400", "700"], display: "swap", preload: false });
 const openDyslexic = localFont({
@@ -22,10 +22,10 @@ const openDyslexic = localFont({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Mindcraft", template: "%s · Mindcraft" },
+  title: { default: "MindCraft", template: "%s · MindCraft" },
   description: "A personal workspace you build your way: tasks, calendar, notes, timer, and practical help starting.",
-  applicationName: "Mindcraft",
-  appleWebApp: { capable: true, title: "Mindcraft", statusBarStyle: "default" },
+  applicationName: "MindCraft",
+  appleWebApp: { capable: true, title: "MindCraft", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

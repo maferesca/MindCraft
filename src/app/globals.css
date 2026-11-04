@@ -25,7 +25,7 @@
   --mc-cube-b: #8fa383;
   --mc-cube-c: #e3b66b;
   --mc-block-tint: 0%;
-  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body: var(--font-lexend), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --line-height: 1.6;
   --letter-spacing: 0em;
   --word-spacing: 0em;
@@ -71,16 +71,20 @@ body {
   overflow-x: hidden;
 }
 
-/* Form controls inherit reading preferences instead of browser defaults. */
-input,
-textarea,
-select,
-button {
-  font: inherit;
-  letter-spacing: inherit;
-  word-spacing: inherit;
-  line-height: inherit;
-  color: inherit;
+/* Form controls inherit reading preferences instead of browser defaults. This
+   stays in the base layer: unlayered rules would override every component and
+   utility class, such as the text color of primary buttons. */
+@layer base {
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    letter-spacing: inherit;
+    word-spacing: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
 }
 
 :focus-visible {

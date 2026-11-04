@@ -12,6 +12,7 @@ import { SelectField, TextField } from "../ui/field";
 import { Modal } from "../ui/modal";
 import { useNotify } from "../ui/notifications";
 import { AppearanceFields, AppearancePreview, Segmented } from "./appearance-fields";
+import { WorkStyleFields } from "./work-style-fields";
 
 const SECTIONS: Array<[SettingsSection, string]> = [
   ["profile", "Profile"],
@@ -173,15 +174,7 @@ function WorkspaceSection() {
         />
       </div>
 
-      <div>
-        <p className="mc-label">Planning style</p>
-        <Segmented
-          label="Planning style"
-          value={preferences.planningStyle}
-          options={[["one_step", "One step at a time"], ["short_list", "A short list"], ["full_overview", "The full overview"]]}
-          onChange={(value) => updatePreferences({ planningStyle: value as Preferences["planningStyle"] })}
-        />
-      </div>
+      <WorkStyleFields value={preferences} onChange={updatePreferences} fields={["planningStyle", "focusTime", "startHelp"]} />
 
       <div className="flex flex-col gap-2">
         <label className="flex items-center gap-2">
@@ -222,7 +215,7 @@ function NotificationsSection() {
   return (
     <div className="flex max-w-2xl flex-col gap-5">
       <p className="rounded-xl bg-surface-muted p-3">
-        Reminders only appear while Mindcraft is open.
+        Reminders only appear while MindCraft is open.
       </p>
       <div>
         <p className="mc-label">Reminder style</p>
@@ -299,18 +292,18 @@ function AiSection() {
       <section className="rounded-xl border border-border p-4">
         <h3 className="font-bold">What is sent to the AI provider</h3>
         <p className="mt-1">
-          The assistant uses Google&apos;s Gemini API, called from the Mindcraft server. When you ask for help, Mindcraft sends only:
+          The assistant uses Google&apos;s Gemini API, called from the MindCraft server. When you ask for help, MindCraft sends only:
         </p>
         <ul className="mt-2 list-disc pl-5">
           <li>your message and the last few messages of this chat</li>
           <li>the selected task (title, description, expected result, deadline, priority, status, steps)</li>
           <li>the titles, status, and deadlines of your other open tasks</li>
           <li>which block types are in your workspace</li>
-          <li>your response detail, language, and planning style preferences</li>
+          <li>your response detail, language, planning style, and how you said you like to work</li>
         </ul>
         <p className="mt-2">
           Notes, calendar events, your email, and your other settings are not sent. Voice recordings are sent once to be turned into text and are
-          not stored by Mindcraft. The assistant can only suggest changes; nothing is changed until you apply a suggestion.
+          not stored by MindCraft. The assistant can only suggest changes; nothing is changed until you apply a suggestion.
         </p>
       </section>
 
@@ -387,7 +380,7 @@ function AccountSection() {
         {mode === "demo" ? "Leave demo and delete demo data" : "Sign out"}
       </button>
       {mode !== "demo" ? (
-        <p className="mc-hint">To delete your account, contact the Mindcraft team.</p>
+        <p className="mc-hint">To delete your account, contact the MindCraft team.</p>
       ) : null}
     </div>
   );

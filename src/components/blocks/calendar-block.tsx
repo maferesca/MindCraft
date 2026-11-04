@@ -26,7 +26,7 @@ const dayLabel = (date: string, pattern: string) => format(parseISO(date), patte
 
 type Editing = { kind: "event" | "work_session"; event: CalendarEvent | null; date: string };
 
-// The Mindcraft calendar: deadlines, events, and work sessions. All dates display
+// The MindCraft calendar: deadlines, events, and work sessions. All dates display
 // in the profile's timezone. It is not connected to Google Calendar or Outlook.
 export function CalendarBlock({ block }: { block: WorkspaceBlock }) {
   const { tasks, events, projects } = useWorkspaceData();
@@ -70,7 +70,7 @@ export function CalendarBlock({ block }: { block: WorkspaceBlock }) {
 
   return (
     <div className="flex h-full flex-col gap-2">
-      <p className="mc-hint">Mindcraft calendar · not synced</p>
+      <p className="mc-hint">MindCraft calendar · not synced</p>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm" onClick={() => setAnchor(today)}>
           Today

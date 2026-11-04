@@ -11,7 +11,7 @@ export function DemoEntry() {
   return (
     <section aria-labelledby="demo-heading" className="mc-card p-4 text-left">
       <h2 id="demo-heading" className="font-bold">
-        Try Mindcraft without an account
+        Try MindCraft without an account
       </h2>
       <p className="mc-hint mt-1">
         Data stays in this browser.

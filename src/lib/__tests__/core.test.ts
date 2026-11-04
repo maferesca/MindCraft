@@ -5,8 +5,8 @@ import { CATALOG_ITEMS } from "../block-catalog";
 import { BLOCK_ORDER, positionsForBreakpoint, sortForPhone } from "../blocks";
 import { isWithinQuietHours, nextStreak } from "../dates";
 import { moveInOrder } from "../layout-edit";
-import { normalizePreferences } from "../preferences";
-import type { AssistantContext } from "../schemas";
+import { DEFAULT_PREFERENCES, normalizePreferences } from "../preferences";
+import { proposalSchema, type AssistantContext } from "../schemas";
 import { THEME_IDS } from "../themes";
 import type { WorkspaceBlock } from "../types";
 
@@ -133,6 +133,17 @@ describe("block catalog", () => {
 });
 
 describe("preferences", () => {
+  it("keeps work style answers and rejects unknown ones", () => {
+    const prefs = normalizePreferences({ focusTime: "morning", startHelp: ["clear_steps"] });
+    expect(prefs).toMatchObject({ focusTime: "morning", startHelp: ["clear_steps"] });
+    expect(normalizePreferences({ startHelp: ["mind_reading"] }).startHelp).toEqual([]);
+  });
+
+  it("does not let AI proposals change the running timer", () => {
+    const parsed = proposalSchema.safeParse({ type: "suggest_preferences", summary: "x", changes: { timer: DEFAULT_PREFERENCES.timer } });
+    expect(parsed.success).toBe(false);
+  });
+
   it("accepts every theme, including ids saved before the palette update", () => {
     for (const theme of THEME_IDS) expect(normalizePreferences({ theme }).theme).toBe(theme);
     expect(THEME_IDS).toEqual(expect.arrayContaining(["clear", "rose", "dark"]));

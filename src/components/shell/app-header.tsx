@@ -1,8 +1,8 @@
 "use client";
 
 import { DropdownMenu, Popover } from "radix-ui";
-import { Bell, Blocks, CalendarCheck, Focus, LogOut, Palette, Shield, SlidersHorizontal, User, UserCog } from "lucide-react";
-import { BrandMark } from "../brand/brand-mark";
+import { Bell, Blocks, CalendarCheck, Flame, Focus, LogOut, Palette, Shield, SlidersHorizontal, User, UserCog } from "lucide-react";
+import { BrandMark, Wordmark } from "../brand/brand-mark";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI, type SettingsSection } from "../providers/workspace-ui";
 
@@ -54,8 +54,11 @@ export function AppHeader() {
         </DropdownMenu.Root>
 
         <div className="flex min-w-0 items-center gap-2">
-          <span className="hidden items-center gap-1.5 text-sm font-bold sm:inline-flex">
-            <BrandMark size={20} /> Mindcraft
+          <span className="hidden sm:inline-flex">
+            <Wordmark className="text-xl" markSize={36} />
+          </span>
+          <span className="sm:hidden">
+            <BrandMark size={34} />
           </span>
           <span className="hidden text-text-muted sm:inline" aria-hidden="true">
             /
@@ -106,7 +109,7 @@ function StreakIndicator() {
   return (
     <Popover.Root>
       <Popover.Trigger className="mc-chip ml-1 shrink-0 cursor-pointer bg-surface" aria-label={`Visit streak: ${streak.current_streak} ${streak.current_streak === 1 ? "day" : "days"}. Show details`}>
-        <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-[3px] bg-cube-c" />
+        <Flame size={14} aria-hidden="true" fill="currentColor" className="shrink-0 text-[#E8590C]" />
         <span className="max-sm:sr-only">{streak.current_streak} day{streak.current_streak === 1 ? "" : "s"}</span>
         <span className="sm:hidden">{streak.current_streak}</span>
       </Popover.Trigger>
@@ -114,7 +117,7 @@ function StreakIndicator() {
         <Popover.Content className="mc-menu max-w-xs p-3" sideOffset={6}>
           <p className="font-semibold">Visit streak: {streak.current_streak}</p>
           <p className="mc-hint mt-1">
-            Days in a row you opened Mindcraft. Best: {streak.best_streak}.
+            Days in a row you opened MindCraft. Best: {streak.best_streak}.
           </p>
           <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={() => updatePreferences({ showStreak: false })}>
             Hide streak

@@ -325,6 +325,11 @@ export function buildContextText(context: AssistantContext): string {
           responseDetail: context.preferences.responseDetail,
           language: context.preferences.language,
           planningStyle: context.preferences.planningStyle,
+          // Stated work habits. Use them to tailor suggestions, never to infer
+          // traits or to override what the person asks for now.
+          focusTime: context.preferences.focusTime,
+          startHelp: context.preferences.startHelp,
+          focusMinutes: context.preferences.focusMinutes,
         }),
       "The saved language is a default. Follow an explicit language request " +
         "or the language of the latest substantive user message.",

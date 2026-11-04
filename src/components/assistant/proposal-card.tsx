@@ -46,7 +46,7 @@ export function ProposalCard({ proposal, storageKey }: { proposal: Proposal; sto
     if (draft.type === "draft_clarification") {
       try {
         await navigator.clipboard.writeText(draft.message);
-        notify("Message copied. Paste it into your usual work channel; Mindcraft does not send it.");
+        notify("Message copied. Paste it into your usual work channel; MindCraft does not send it.");
       } catch {
         notify("Copy didn't work here. Select the text and copy it manually.", { tone: "error" });
       }

@@ -1,4 +1,4 @@
-// Mindcraft service worker.
+// MindCraft service worker.
 // Caches the static app shell and serves an offline page for navigations.
 // It does NOT queue edits, sync data, or show push notifications.
 const CACHE = "mindcraft-shell-v1";

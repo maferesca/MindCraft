@@ -17,7 +17,7 @@ const MESSAGES: Record<Exclude<NotificationPreferences["style"], "off">, string>
   minimal: "Welcome back.",
 };
 
-// In-app reminders only. They appear inside Mindcraft (on return after the
+// In-app reminders only. They appear inside MindCraft (on return after the
 // chosen inactivity period, or at the preferred time while the app is open).
 // No background or push notifications are sent. "Off" schedules nothing.
 export function ReminderBanner() {

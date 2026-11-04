@@ -27,6 +27,15 @@ export const FONT_OPTIONS = {
   opendyslexic: { label: "OpenDyslexic", stack: "var(--font-opendyslexic), Verdana, sans-serif" },
 } as const;
 
+export const START_HELP_LABELS = {
+  clear_steps: "Clear steps",
+  examples: "An example to follow",
+  time_limit: "A time limit",
+  knowing_why: "Knowing why it matters",
+  quick_win: "Starting with something quick",
+} as const;
+const START_HELP_OPTIONS = Object.keys(START_HELP_LABELS) as [keyof typeof START_HELP_LABELS, ...Array<keyof typeof START_HELP_LABELS>];
+
 export const preferencesSchema = z.object({
   theme: z.enum(THEME_IDS),
   accent: z.enum(["theme", "terracotta", "sage", "ocean", "plum", "graphite"]),
@@ -42,6 +51,8 @@ export const preferencesSchema = z.object({
   responseDetail: z.enum(["brief", "balanced", "detailed"]),
   language: z.string().max(40),
   planningStyle: z.enum(["one_step", "short_list", "full_overview"]),
+  focusTime: z.enum(["not_set", "morning", "afternoon", "evening", "varies"]),
+  startHelp: z.array(z.enum(START_HELP_OPTIONS)).max(5),
   workMinutes: z.number().int().min(1).max(600),
   breakMinutes: z.number().int().min(1).max(120),
   timer: timerSessionSchema,
@@ -54,7 +65,7 @@ export type Preferences = z.infer<typeof preferencesSchema>;
 export const DEFAULT_PREFERENCES: Preferences = {
   theme: "warm-studio",
   accent: "theme",
-  fontFamily: "system",
+  fontFamily: "lexend",
   textSize: 16,
   lineHeight: 1.6,
   letterSpacing: 0,
@@ -66,6 +77,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   responseDetail: "brief",
   language: "auto",
   planningStyle: "short_list",
+  focusTime: "not_set",
+  startHelp: [],
   workMinutes: 25,
   breakMinutes: 5,
   timer: { mode: "countdown", phase: "work", runState: "idle", startedAt: null, accumulatedMs: 0, targetMs: 0, endedBy: null, taskId: null },
