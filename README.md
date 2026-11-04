@@ -42,6 +42,24 @@ Then open http://localhost:3000.
 
 Email confirmation follows your Supabase Auth settings. If confirmation is on, sign-up shows "Check your email". If it is off, new users go straight to setup.
 
+### Deploying to Vercel
+
+1. In **Vercel > Settings > Environment Variables**, set these for Production:
+
+   | Variable | Value |
+   | --- | --- |
+   | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | From the Supabase project |
+   | `GEMINI_API_KEY`, `GROQ_API_KEY` | At least one, to turn on the assistant |
+   | `AI_PRIMARY_PROVIDER` | `gemini` or `groq` |
+   | `ALLOW_DEMO_AI` | `false` on a public deployment |
+   | `NEXT_PUBLIC_ENABLE_DEMO` | `true` to offer the demo, `false` to hide it |
+
+   See `.env.example` for the optional variables. Changing a `NEXT_PUBLIC_` value requires a new deployment, because it is built into the browser code. Never add the Supabase service role key.
+2. In Supabase **Authentication > URL Configuration**, set **Site URL** to the production URL and add `https://your-domain/auth/callback` to **Redirect URLs**. If the callback is not allowed, Supabase falls back to the Site URL, so a Site URL left on localhost sends email links to localhost.
+3. Apply any new files in `supabase/migrations/` before deploying code that needs them.
+4. Run `npm run verify` and `npm run build`, then deploy. A push to the production branch deploys it. Other branches get a preview deployment.
+5. After deploying, request a password reset and confirm that the email link opens the production site.
+
 ### Scripts
 
 | Command | What it does |
