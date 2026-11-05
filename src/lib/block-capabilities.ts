@@ -32,8 +32,8 @@ export const BLOCK_CAPABILITIES: Record<BlockType, BlockCapability> = {
   next_step: {
     type: "next_step",
     purpose: "Guide one task from start to finish.",
-    supportedData: ["instructions", "expected deliverable", "ordered steps", "Before submitting checklist", "linked resources"],
-    actions: ["show one step or all steps", "check off steps", "check off review items", "mark the task done"],
+    supportedData: ["instructions", "expected deliverable", "ordered steps", "Before submitting checklist", "linked resources", "missing information"],
+    actions: ["show steps at the Quick Start, Guided, or Detailed level", "show steps as a list or a visual flow", "read steps aloud", "check off steps", "check off review items", "record and resolve missing information", "mark the task done"],
     appropriateWhen: ["the person knows the task but not how to proceed", "the task has several steps", "the deliverable must be reviewed before it is finished"],
     limits: ["shows one task at a time"],
   },

@@ -143,7 +143,16 @@ export const proposalSchema = z.discriminatedUnion("type", [
     type: z.literal("propose_steps"),
     summary: z.string().max(400),
     task_id: z.string().uuid(),
-    steps: z.array(z.string().trim().min(1).max(300)).min(1).max(8),
+    steps: z.array(z.string().trim().min(1).max(300)).min(1).max(12),
+    // Set by the server when the steps come before the work already written.
+    insert_first: z.boolean().optional(),
+  }),
+  z.object({
+    type: z.literal("record_missing_info"),
+    summary: z.string().max(400),
+    task_id: z.string().uuid(),
+    missing: z.string().trim().min(1).max(1000),
+    support: z.string().trim().max(500).optional(),
   }),
   z.object({
     type: z.literal("suggest_blocks"),
@@ -184,8 +193,14 @@ export type AssistantResult = z.infer<typeof assistantResultSchema>;
 // Requests from the browser to AI endpoints
 // ---------------------------------------------------------------------------
 
+// The button that asked for help, when one did. The first three ask for steps; the
+// others are the options under "What's making it hard to start?" in Focus Mode.
+export const HELP_REQUESTS = ["steps", "smaller", "where_to_begin", "overwhelmed", "distracted", "tired", "missing_information"] as const;
+export type HelpRequest = (typeof HELP_REQUESTS)[number];
+
 export const assistantContextSchema = z.object({
   mode: z.enum(["chat", "help_me_start", "planning", "missing_information", "onboarding"]),
+  helpRequest: z.enum(HELP_REQUESTS).optional(),
   displayName: z.string().trim().max(60).nullable().optional(),
   task: z
     .object({
@@ -210,6 +225,7 @@ export const assistantContextSchema = z.object({
       responseDetail: z.enum(["brief", "balanced", "detailed"]),
       language: z.string().max(40),
       planningStyle: z.string().max(40),
+      communicationStyle: z.enum(["supportive", "direct", "neutral"]).optional(),
       taskPresentation: z.string().max(40).optional(),
       focusTime: z.string().max(40).optional(),
       startHelp: z.array(z.string().max(40)).max(5).optional(),
@@ -217,7 +233,7 @@ export const assistantContextSchema = z.object({
     })
     .optional(),
   declined: z.array(z.enum(["timer", "planning", "breaks", "assistance"])).max(4).optional(),
-  missingInformation: z.array(z.string().max(60)).max(6).optional(),
+  missingInformation: z.array(z.string().max(300)).max(6).optional(),
   today: isoDate.optional(),
 });
 export type AssistantContext = z.infer<typeof assistantContextSchema>;

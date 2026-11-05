@@ -22,6 +22,8 @@ interface TimerContextValue {
   finish: () => void;
   reset: () => void;
   startBreak: () => void;
+  // Runs one countdown of this length without changing the saved session length.
+  startShortSession: (minutes: number, taskId: string) => void;
 }
 
 const TimerContext = createContext<TimerContextValue | null>(null);
@@ -118,6 +120,12 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       setNow(current);
       save(timer.finish(session, current, "user"));
       announce("Session finished.");
+    },
+    startShortSession: (minutes, taskId) => {
+      const current = Date.now();
+      setNow(current);
+      save(timer.start({ ...session, mode: "countdown", taskId }, current, minutes * 60_000));
+      announce("Session started.");
     },
     reset: () => save(timer.reset(session)),
     startBreak: () => {

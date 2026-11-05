@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { cacheAppearance } from "@/lib/appearance-cache";
 import { blockPlacement } from "@/lib/block-capabilities";
 import { BLOCK_DEFINITIONS, GRID_COLUMNS, findFreePosition, sizeFor } from "@/lib/blocks";
@@ -8,11 +8,13 @@ import { clearSessionData } from "@/lib/clear-session-data";
 import { createLocalRepository } from "@/lib/data/local-repository";
 import { RepositoryError, type Repository, type Row, type TableName } from "@/lib/data/repository";
 import { createSupabaseRepository } from "@/lib/data/supabase-repository";
+import { createWriteTracker } from "@/lib/data/write-tracker";
 import { browserTimezone } from "@/lib/dates";
 import { DEFAULT_PREFERENCES, applyPreferencesToDocument, normalizePreferences, type Preferences } from "@/lib/preferences";
 import { proposalSchema, type Proposal, type TaskInput } from "@/lib/schemas";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { proposalRecordId } from "@/lib/task-plan";
+import { NO_SUPPORT_YET } from "@/lib/task-helpers";
+import { normalizeTitle, proposalRecordId } from "@/lib/task-plan";
 import type {
   BlockType,
   CalendarEvent,
@@ -56,6 +58,8 @@ interface WorkspaceData {
   loadError: string | null;
   mode: Repository["mode"] | null;
   email: string | null;
+  // True only while storage has confirmed every change made so far.
+  workSaved: boolean;
   profile: Profile | null;
   preferences: Preferences;
   notificationPreferences: NotificationPreferences | null;
@@ -83,7 +87,7 @@ interface WorkspaceData {
   updateTask: (id: string, patch: Partial<Task>) => Promise<void>;
   deleteTask: (id: string) => Promise<DeletedTaskSnapshot | null>;
   restoreTask: (snapshot: DeletedTaskSnapshot) => Promise<void>;
-  addStep: (taskId: string, text: string) => Promise<TaskStep | null>;
+  addStep: (taskId: string, text: string, position?: number) => Promise<TaskStep | null>;
   updateStep: (id: string, patch: Partial<TaskStep>) => Promise<void>;
   deleteStep: (id: string) => Promise<void>;
   reviewActions: CollectionActions<ReviewItem>;
@@ -132,6 +136,17 @@ function withoutOwner<T extends { user_id: string }>(record: T): Row {
   const copy: Row = { ...record };
   delete copy.user_id;
   return copy;
+}
+
+// For records with a deterministic id: the second attempt reaches the same row, and
+// the database rejects only that copy.
+async function insertOnce<T>(repo: Repository, table: TableName, row: Row): Promise<T | null> {
+  try {
+    return await repo.insert<T>(table, row);
+  } catch (error) {
+    if (error instanceof RepositoryError && error.code === "23505") return null;
+    throw error;
+  }
 }
 
 function newLocalId() {
@@ -190,6 +205,8 @@ function useCollectionActions<T extends { id: string }>(
 export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const { notify } = useNotify();
   const repoRef = useRef<Repository | null>(null);
+  const [writes] = useState(createWriteTracker);
+  const workSaved = useSyncExternalStore(writes.subscribe, writes.isConfirmed, () => false);
   const [status, setStatus] = useState<Status>("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [session, setSession] = useState<{ mode: Repository["mode"]; email: string | null } | null>(null);
@@ -236,7 +253,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           if (!cancelled) setStatus("signed_out");
           return;
         }
-        repoRef.current = repo;
+        repoRef.current = writes.wrap(repo);
         setSession({ mode: repo.mode, email: repo.email });
         const [profiles, prefRows, notificationRows, workspaces, blockRows, taskRows, stepRows, noteRows, eventRows, conversations, reviewRows, projectRows, resourceRows, checkInRows] =
           await Promise.all([
@@ -301,7 +318,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [writes]);
 
   // ---------------------------------------------------------------------------
   // Profile and preferences
@@ -478,10 +495,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   );
 
   const addStep = useCallback(
-    async (taskId: string, text: string) => {
-      const position = steps.filter((step) => step.task_id === taskId).reduce((max, step) => Math.max(max, step.position + 1), 0);
+    async (taskId: string, text: string, position?: number) => {
+      const next = position ?? steps.filter((step) => step.task_id === taskId).reduce((max, step) => Math.max(max, step.position + 1), 0);
       try {
-        const step = await requireRepo(repoRef).insert<TaskStep>("task_steps", { task_id: taskId, text, position, done: false });
+        const step = await requireRepo(repoRef).insert<TaskStep>("task_steps", { task_id: taskId, text, position: next, done: false });
         setSteps((current) => [...current, step]);
         return step;
       } catch (error) {
@@ -779,18 +796,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const applyTaskPlan = useCallback(
     async (plan: Extract<Proposal, { type: "task_plan" }>, key: string) => {
       const repo = requireRepo(repoRef);
-      const insertOnce = async <T,>(table: TableName, row: Row): Promise<T | null> => {
-        try {
-          return await repo.insert<T>(table, row);
-        } catch (error) {
-          if (error instanceof RepositoryError && error.code === "23505") return null;
-          throw error;
-        }
-      };
       const { task: draft } = plan;
-      const existing = plan.task_id ? tasks.find((task) => task.id === plan.task_id) : null;
+      const plannedId = await proposalRecordId(key);
+      // A plan for work already on the list joins that task instead of repeating it.
+      const sameTitle = (task: Task) => task.status !== "done" && normalizeTitle(task.title) === normalizeTitle(draft.title);
+      const existing = plan.task_id ? tasks.find((task) => task.id === plan.task_id) : (tasks.find((task) => task.id === plannedId) ?? tasks.find(sameTitle));
       if (plan.task_id && !existing) throw new Error("That task no longer exists.");
-      const taskId = existing?.id ?? (await proposalRecordId(key));
+      const taskId = existing?.id ?? plannedId;
       let skippedEstimate = false;
       let alreadySaved = false;
 
@@ -811,12 +823,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         };
         let created: Task | null;
         try {
-          created = await insertOnce<Task>("tasks", draft.estimated_minutes ? { ...row, estimated_minutes: draft.estimated_minutes } : row);
+          created = await insertOnce<Task>(repo, "tasks", draft.estimated_minutes ? { ...row, estimated_minutes: draft.estimated_minutes } : row);
         } catch (error) {
           // The app can deploy before the estimates migration runs. The task still matters more.
           if (!(error instanceof RepositoryError) || !["42703", "PGRST204"].includes(error.code ?? "")) throw error;
           skippedEstimate = true;
-          created = await insertOnce<Task>("tasks", row);
+          created = await insertOnce<Task>(repo, "tasks", row);
         }
         if (created) {
           const task = created;
@@ -831,12 +843,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       if (!taskSteps.some((step) => step.text === draft.first_action)) {
         // Placed first, so it becomes the current step in the Task guide and Focus Mode.
         const position = taskSteps.reduce((lowest, step) => Math.min(lowest, step.position - 1), 0);
-        const step = await insertOnce<TaskStep>("task_steps", { id: await proposalRecordId(`${key}:step`), task_id: taskId, text: draft.first_action, position, done: false });
+        const step = await insertOnce<TaskStep>(repo, "task_steps", { id: await proposalRecordId(`${key}:step`), task_id: taskId, text: draft.first_action, position, done: false });
         if (step) setSteps((current) => [...current, step]);
       }
       if (draft.done_when && !reviewItems.some((item) => item.task_id === taskId && item.text === draft.done_when)) {
         const position = reviewItems.filter((item) => item.task_id === taskId).length;
-        const item = await insertOnce<ReviewItem>("task_review_items", { id: await proposalRecordId(`${key}:review`), task_id: taskId, text: draft.done_when, position, done: false });
+        const item = await insertOnce<ReviewItem>(repo, "task_review_items", { id: await proposalRecordId(`${key}:review`), task_id: taskId, text: draft.done_when, position, done: false });
         if (item) setReviewItems((current) => [...current, item]);
       }
 
@@ -857,10 +869,44 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           if (placed) await updateBlockConfig(placed.id, config);
         }
       }
-      const saved = existing ? "Plan added to the task." : alreadySaved ? "This task was already saved." : "Task saved.";
+      const saved = existing?.id === plannedId || alreadySaved ? "This task was already saved." : existing ? "Plan added to the task." : "Task saved.";
       return skippedEstimate ? `${saved} The estimated time was not saved because the database needs an update.` : saved;
     },
     [tasks, steps, reviewItems, blocks, updateTask, addBlocks, saveLayout, updateBlockConfig],
+  );
+
+  // Each task and step has a deterministic id, so a retry after a partial failure
+  // adds only what is missing. A task already on the list is not added again.
+  const applyCreateTasks = useCallback(
+    async (proposal: Extract<Proposal, { type: "create_tasks" }>, key: string) => {
+      const repo = requireRepo(repoRef);
+      const known = new Set(tasks.filter((task) => task.status !== "done").map((task) => normalizeTitle(task.title)));
+      let added = 0;
+      for (const [index, task] of proposal.tasks.entries()) {
+        if (known.has(normalizeTitle(task.title))) continue;
+        known.add(normalizeTitle(task.title));
+        const id = await proposalRecordId(`${key}:task:${index}`);
+        const created = await insertOnce<Task>(repo, "tasks", {
+          id,
+          status: "todo",
+          title: task.title,
+          description: task.description || null,
+          expected_result: task.expected_result || null,
+          due_date: task.due_date ?? null,
+          priority: task.priority ?? null,
+        });
+        if (!created) continue;
+        added += 1;
+        setTasks((current) => [...current, created]);
+        for (const [position, text] of (task.steps ?? []).entries()) {
+          const step = await insertOnce<TaskStep>(repo, "task_steps", { id: await proposalRecordId(`${key}:task:${index}:step:${position}`), task_id: id, text, position, done: false });
+          if (step) setSteps((current) => [...current, step]);
+        }
+      }
+      if (!added) return "These tasks are already on your list.";
+      return added === 1 ? "Added 1 task." : `Added ${added} tasks.`;
+    },
+    [tasks],
   );
 
   const applyProposal = useCallback(
@@ -871,27 +917,38 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       switch (proposal.type) {
         case "task_plan":
           return applyTaskPlan(proposal, key ?? crypto.randomUUID());
-        case "create_tasks": {
-          let count = 0;
-          for (const task of proposal.tasks) {
-            const created = await createTask(
-              {
-                title: task.title,
-                description: task.description || null,
-                expected_result: task.expected_result || null,
-                due_date: task.due_date ?? null,
-                priority: task.priority ?? null,
-              },
-              task.steps ?? [],
-            );
-            if (created) count += 1;
-          }
-          return count === 1 ? "Added 1 task." : `Added ${count} tasks.`;
-        }
+        case "create_tasks":
+          return applyCreateTasks(proposal, key ?? crypto.randomUUID());
         case "propose_steps": {
           if (!tasks.some((task) => task.id === proposal.task_id)) throw new Error("That task no longer exists.");
-          for (const text of proposal.steps) await addStep(proposal.task_id, text);
-          return `Added ${proposal.steps.length} steps.`;
+          const taskSteps = steps.filter((step) => step.task_id === proposal.task_id);
+          const known = new Set(taskSteps.map((step) => normalizeTitle(step.text)));
+          const fresh = proposal.steps.filter((text) => !known.has(normalizeTitle(text)));
+          if (!fresh.length) return "These steps are already on this task.";
+          const positions = taskSteps.map((step) => step.position);
+          const start = proposal.insert_first ? Math.min(0, ...positions) - fresh.length : Math.max(-1, ...positions) + 1;
+          for (const [index, text] of fresh.entries()) {
+            if (!(await addStep(proposal.task_id, text, start + index))) throw new Error("A step could not be saved. Try again.");
+          }
+          return fresh.length === 1 ? "Added 1 step." : `Added ${fresh.length} steps.`;
+        }
+        case "record_missing_info": {
+          if (!tasks.some((task) => task.id === proposal.task_id)) throw new Error("That task no longer exists.");
+          const repeated = checkIns.some(
+            (entry) => entry.kind === "help" && entry.task_id === proposal.task_id && entry.help_status !== "resolved" && normalizeTitle(entry.blocking ?? "") === normalizeTitle(proposal.missing),
+          );
+          if (repeated) return "This is already recorded on the task.";
+          const entry = await insertOnce<CheckIn>(requireRepo(repoRef), "check_ins", {
+            id: await proposalRecordId(`${key ?? crypto.randomUUID()}:missing`),
+            kind: "help",
+            task_id: proposal.task_id,
+            blocking: proposal.missing,
+            support: proposal.support || NO_SUPPORT_YET,
+            help_status: "open",
+            follow_ups: [],
+          });
+          if (entry) setCheckIns((current) => [...current, entry]);
+          return "Saved to this task.";
         }
         case "suggest_blocks": {
           await addBlocks(proposal.blocks.map((block) => ({ type: block.block_type })));
@@ -916,7 +973,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           return "Draft ready to copy.";
       }
     },
-    [tasks, applyTaskPlan, createTask, addStep, addBlocks, updatePreferences],
+    [tasks, steps, checkIns, applyTaskPlan, applyCreateTasks, addStep, addBlocks, updatePreferences],
   );
 
   const signOut = useCallback(async () => {
@@ -932,6 +989,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     loadError,
     mode: session?.mode ?? null,
     email: session?.email ?? null,
+    workSaved,
     profile,
     preferences,
     notificationPreferences,

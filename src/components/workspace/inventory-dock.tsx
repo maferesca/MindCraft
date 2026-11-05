@@ -1,7 +1,7 @@
 "use client";
 
 import { Tooltip } from "radix-ui";
-import { ChevronLeft, ChevronRight, LayoutGrid, MessageCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageCircle, PackageOpen } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { BLOCK_DEFINITIONS, BLOCK_ORDER } from "@/lib/blocks";
 import type { BlockType, WorkspaceBlock } from "@/lib/types";
@@ -150,6 +150,7 @@ export function InventoryDock({ phone, hiddenBlocks, draggingType, onAdd, onRest
           </div>
           {overflow.right ? <IconButton size="sm" label="Scroll blocks right" icon={<ChevronRight size={18} />} onClick={() => scroll(1)} tooltipSide="top" tabIndex={-1} /> : null}
 
+          <span className="h-8 w-px shrink-0 bg-border" aria-hidden="true" />
           <button
             ref={openButtonRef}
             type="button"
@@ -157,12 +158,12 @@ export function InventoryDock({ phone, hiddenBlocks, draggingType, onAdd, onRest
             tabIndex={activeIndex === BLOCK_ORDER.length ? 0 : -1}
             onFocus={() => setActiveIndex(BLOCK_ORDER.length)}
             aria-expanded={inventoryOpen}
-            className="mc-btn mc-btn-secondary mc-btn-sm h-11 shrink-0 whitespace-nowrap"
+            className={`mc-btn h-11 shrink-0 whitespace-nowrap font-bold ${inventoryOpen ? "mc-btn-secondary" : "mc-btn-primary"}`}
             onClick={() => (inventoryOpen ? closeInventory() : setInventoryOpen(true))}
           >
-            <LayoutGrid size={16} aria-hidden="true" />
+            <PackageOpen size={20} aria-hidden="true" />
             {inventoryOpen ? "Close inventory" : "Open inventory"}
-            {hiddenBlocks.length ? <span className="mc-chip">{hiddenBlocks.length} hidden</span> : null}
+            {hiddenBlocks.length ? <span className="text-sm font-semibold">({hiddenBlocks.length} hidden)</span> : null}
           </button>
 
           {phone ? null : (

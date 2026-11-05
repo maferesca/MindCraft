@@ -36,6 +36,19 @@ export const START_HELP_LABELS = {
 } as const;
 const START_HELP_OPTIONS = Object.keys(START_HELP_LABELS) as [keyof typeof START_HELP_LABELS, ...Array<keyof typeof START_HELP_LABELS>];
 
+// Saved as planningStyle, so choices made before these names existed keep working.
+export const ASSISTANCE_LEVELS = {
+  one_step: { label: "Quick Start", description: "One clear next step, and nothing more until it is done." },
+  short_list: { label: "Guided", description: "Three to five clear steps to follow in order." },
+  full_overview: { label: "Detailed", description: "Very small, explicit steps, shown a few at a time." },
+} as const;
+
+export const COMMUNICATION_STYLES = {
+  supportive: { label: "Supportive", description: "Friendly, encouraging, and patient." },
+  direct: { label: "Direct", description: "Short, specific, and action-oriented." },
+  neutral: { label: "Neutral", description: "Clear, factual, and minimal." },
+} as const;
+
 export const preferencesSchema = z.object({
   theme: z.enum(THEME_IDS),
   accent: z.enum(["theme", "terracotta", "sage", "ocean", "plum", "graphite"]),
@@ -51,6 +64,9 @@ export const preferencesSchema = z.object({
   responseDetail: z.enum(["brief", "balanced", "detailed"]),
   language: z.string().max(40),
   planningStyle: z.enum(["one_step", "short_list", "full_overview"]),
+  communicationStyle: z.enum(["supportive", "direct", "neutral"]),
+  stepLayout: z.enum(["list", "visual"]),
+  workspaceGuideSeen: z.boolean(),
   taskPresentation: z.enum(["not_set", "checklist", "short_text"]),
   focusTime: z.enum(["not_set", "morning", "afternoon", "evening", "varies"]),
   startHelp: z.array(z.enum(START_HELP_OPTIONS)).max(5),
@@ -78,6 +94,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   responseDetail: "brief",
   language: "auto",
   planningStyle: "short_list",
+  communicationStyle: "supportive",
+  stepLayout: "list",
+  workspaceGuideSeen: false,
   taskPresentation: "not_set",
   focusTime: "not_set",
   startHelp: [],
@@ -136,6 +155,13 @@ export function applyPreferencesToDocument(preferences: Preferences) {
   root.style.fontSize = `${preferences.textSize}px`;
 }
 
+// Shows a saved value by its visible name wherever one exists.
+export function preferenceValueLabel(key: string, value: unknown) {
+  if (key === "planningStyle") return ASSISTANCE_LEVELS[value as Preferences["planningStyle"]]?.label ?? String(value);
+  if (key === "communicationStyle") return COMMUNICATION_STYLES[value as Preferences["communicationStyle"]]?.label ?? String(value);
+  return String(value);
+}
+
 export const PREFERENCE_LABELS: Partial<Record<keyof Preferences, string>> = {
   theme: "Theme",
   accent: "Accent color",
@@ -148,7 +174,8 @@ export const PREFERENCE_LABELS: Partial<Record<keyof Preferences, string>> = {
   reducedMotion: "Motion",
   sounds: "Sounds",
   responseDetail: "Assistant response detail",
-  planningStyle: "How you like to see your work",
+  planningStyle: "Assistance level",
+  communicationStyle: "Communication style",
   taskPresentation: "How the assistant presents tasks",
   workMinutes: "Work session length in minutes",
 };

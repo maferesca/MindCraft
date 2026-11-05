@@ -4,14 +4,15 @@ import { DropdownMenu } from "radix-ui";
 import { Loader2, MessageCircle, MoreHorizontal, Plus, RotateCcw, Send, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { askAssistant } from "@/lib/ai/client";
-import { proposalSchema, type Proposal } from "@/lib/schemas";
+import { proposalSchema, type HelpRequest, type Proposal } from "@/lib/schemas";
 import { findNamedTask } from "@/lib/task-plan";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI, type AssistantMode } from "../providers/workspace-ui";
 import { IconButton } from "../ui/icon-button";
+import { ReadAloud } from "../ui/read-aloud";
 import { restoreFocus } from "../ui/restore-focus";
+import { AiErrorNotice } from "./ai-error-notice";
 import { ProposalCard } from "./proposal-card";
-import { RateLimitNotice } from "./rate-limit-notice";
 import { useAssistantContext } from "./use-assistant-context";
 import { useLocalDraft } from "./use-local-draft";
 import { VoiceRecorder } from "./voice-recorder";
@@ -64,7 +65,7 @@ export function AssistantButton() {
 // and Missing information, with a single saved conversation.
 export function AssistantPanel() {
   const { messages, profile, tasks, appendMessage, clearChat } = useWorkspaceData();
-  const { assistantOpen, assistantRequest, consumeAssistantRequest, closeAssistant, openSettings, openTaskEditor } = useWorkspaceUI();
+  const { assistantOpen, assistantRequest, consumeAssistantRequest, closeAssistant, openMissingInfo, openSettings, openTaskEditor } = useWorkspaceUI();
   const buildContext = useAssistantContext();
   const [input, setInput] = useLocalDraft("assistant");
   const [mode, setMode] = useState<AssistantMode>("chat");
@@ -81,15 +82,17 @@ export function AssistantPanel() {
     proposal: unknown;
     userSaved: boolean;
   } | null>(null);
-  const [error, setError] = useState<{ message: string; text: string; rateLimited?: boolean } | null>(null);
+  const [error, setError] = useState<{ code: string; message: string; text: string; helpRequest?: HelpRequest } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const task = taskId ? tasks.find((item) => item.id === taskId) : null;
   const name = profile?.display_name?.trim();
 
-  async function send(text: string, sendMode: AssistantMode = mode, sendTaskId: string | null = taskId) {
+  async function send(text: string, sendMode: AssistantMode = mode, sendTaskId: string | null = taskId, requested?: HelpRequest) {
     const content = text.trim();
     if (!content || sendingRef.current) return;
+    // Sending the kept text again is the same request, even without pressing Retry.
+    const helpRequest = requested ?? (error?.text === content ? error.helpRequest : undefined);
     sendingRef.current = true;
     setPending(true);
     setError(null);
@@ -99,9 +102,9 @@ export function AssistantPanel() {
       if (!exchange || exchange.text !== content || exchange.mode !== sendMode || exchange.taskId !== sendTaskId) {
         const history = messages.slice(-10).map((message) => ({ role: message.role, content: message.content }));
         const contextTaskId = sendTaskId ?? findNamedTask(content, tasks)?.id ?? null;
-        const result = await askAssistant([...history, { role: "user", content }], buildContext(sendMode, contextTaskId, [content]));
+        const result = await askAssistant([...history, { role: "user", content }], buildContext(sendMode, contextTaskId, [content], helpRequest));
         if (!result.ok) {
-          setError({ message: result.message, text: content, rateLimited: result.code === "rate_limited" });
+          setError({ code: result.code, message: result.message, text: content, helpRequest });
           setInput((current) => current || content);
           return;
         }
@@ -128,10 +131,10 @@ export function AssistantPanel() {
     } catch {
       setInput((current) => current || content);
       setError({
-        message: savingReply
-          ? "The assistant replied, but the conversation could not be saved. Try again to save it."
-          : "The assistant could not answer. Please try again.",
+        code: savingReply ? "not_saved" : "error",
+        message: "The assistant replied, but the conversation could not be saved. Try again to save it.",
         text: content,
+        helpRequest,
       });
     } finally {
       sendingRef.current = false;
@@ -150,7 +153,7 @@ export function AssistantPanel() {
     const requestTask = request.taskId ? tasks.find((item) => item.id === request.taskId) : null;
     const message =
       request.message ?? (request.mode === "help_me_start" && requestTask ? `Help me start "${requestTask.title}".` : "");
-    if (request.autoSend && message) send(message, request.mode, request.taskId ?? null);
+    if (request.autoSend && message) send(message, request.mode, request.taskId ?? null, request.helpRequest);
     else if (message) setInput(message);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assistantOpen, assistantRequest]);
@@ -247,6 +250,7 @@ export function AssistantPanel() {
                 <span className="sr-only">{message.role === "user" ? "You said:" : "Assistant:"}</span>
                 {message.content}
               </div>
+              {message.role === "assistant" ? <ReadAloud text={message.content} label="Read this reply aloud" /> : null}
               {message.role === "assistant"
                 ? proposalsFrom(message.proposal).map((proposal, index) => (
                     <div key={index} className="mt-2 max-w-[22rem]">
@@ -263,24 +267,31 @@ export function AssistantPanel() {
           </p>
         ) : null}
         {error ? (
-          <div className="mt-3 rounded-xl border-2 border-danger p-3" role="alert">
-            {error.rateLimited ? (
-              <RateLimitNotice messageKept={input.trim() === error.text} />
-            ) : (
-              <>
-                <p className="font-semibold text-danger">{error.message}</p>
-                <p className="mc-hint">Your message is kept below.</p>
-              </>
-            )}
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm" onClick={() => send(error.text)}>
-                <RotateCcw size={14} aria-hidden="true" /> Try again
+          <AiErrorNotice code={error.code} message={error.message} textKept={input.trim() === error.text}>
+            <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm" onClick={() => send(error.text)}>
+              <RotateCcw size={14} aria-hidden="true" /> Retry
+            </button>
+            {error.helpRequest === "missing_information" && taskId ? (
+              <button
+                type="button"
+                className="mc-btn mc-btn-ghost mc-btn-sm"
+                onClick={() => {
+                  closeAssistant();
+                  openMissingInfo(taskId);
+                }}
+              >
+                Write it myself
               </button>
+            ) : taskId ? (
+              <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={closeAssistant}>
+                Continue manually
+              </button>
+            ) : (
               <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={() => openTaskEditor(null, error.text)}>
                 <Plus size={14} aria-hidden="true" /> Add a task myself
               </button>
-            </div>
-          </div>
+            )}
+          </AiErrorNotice>
         ) : null}
       </div>
 

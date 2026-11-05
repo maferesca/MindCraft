@@ -11,6 +11,7 @@ import type { BlockType } from "@/lib/types";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
 import { useNotify } from "../ui/notifications";
+import { ReadAloud } from "../ui/read-aloud";
 import { useProposalOutcome } from "./proposal-outcome";
 
 export type TaskPlanProposal = Extract<Proposal, { type: "task_plan" }>;
@@ -184,7 +185,9 @@ export function TaskPlanCard({ proposal, storageKey }: { proposal: TaskPlanPropo
           {editing ? (
             <textarea className="mc-input" rows={2} aria-label="First action" maxLength={500} value={task.first_action} onChange={(event) => setField("first_action", event.target.value)} />
           ) : (
-            task.first_action
+            <>
+              {task.first_action} <ReadAloud text={task.first_action} label="Read the first action aloud" />
+            </>
           )}
         </PlanRow>
       </dl>

@@ -3,11 +3,12 @@
 import { Check, Copy, Pencil, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { BLOCK_DEFINITIONS } from "@/lib/blocks";
-import { PREFERENCE_LABELS } from "@/lib/preferences";
+import { PREFERENCE_LABELS, preferenceValueLabel } from "@/lib/preferences";
 import type { Proposal } from "@/lib/schemas";
 import { PRIORITY_LABELS, formatDueDate } from "@/lib/task-helpers";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useNotify } from "../ui/notifications";
+import { ReadAloud } from "../ui/read-aloud";
 import { useProposalOutcome } from "./proposal-outcome";
 import { TaskPlanCard } from "./task-plan-card";
 
@@ -172,6 +173,8 @@ function ProposalBody({ proposal, editing, onChange }: { proposal: SimpleProposa
       );
     case "propose_steps":
       return (
+        <>
+        <ReadAloud text={proposal.steps.join(". ")} label="Read these steps aloud" />
         <ol className="flex list-decimal flex-col gap-1 pl-5">
           {proposal.steps.map((step, index) => (
             <li key={index}>
@@ -189,6 +192,33 @@ function ProposalBody({ proposal, editing, onChange }: { proposal: SimpleProposa
             </li>
           ))}
         </ol>
+        </>
+      );
+    case "record_missing_info":
+      return editing ? (
+        <div className="flex flex-col gap-2">
+          <textarea
+            className="mc-input"
+            rows={3}
+            aria-label="What information is missing"
+            value={proposal.missing}
+            maxLength={1000}
+            onChange={(event) => onChange({ ...proposal, missing: event.target.value })}
+          />
+          <input
+            className="mc-input"
+            aria-label="Who or what could help"
+            placeholder="Who or what could help (optional)"
+            value={proposal.support ?? ""}
+            maxLength={500}
+            onChange={(event) => onChange({ ...proposal, support: event.target.value })}
+          />
+        </div>
+      ) : (
+        <div className="rounded-lg bg-surface-muted p-2">
+          <p className="whitespace-pre-wrap">{proposal.missing}</p>
+          {proposal.support ? <p className="mc-hint mt-1">Could help: {proposal.support}</p> : null}
+        </div>
       );
     case "suggest_blocks":
       return (
@@ -223,7 +253,7 @@ function ProposalBody({ proposal, editing, onChange }: { proposal: SimpleProposa
         <ul className="flex flex-col gap-1">
           {Object.entries(proposal.changes).map(([key, value]) => (
             <li key={key}>
-              {PREFERENCE_LABELS[key as keyof typeof PREFERENCE_LABELS] ?? key}: <span className="font-semibold">{String(value)}</span>
+              {PREFERENCE_LABELS[key as keyof typeof PREFERENCE_LABELS] ?? key}: <span className="font-semibold">{preferenceValueLabel(key, value)}</span>
             </li>
           ))}
         </ul>

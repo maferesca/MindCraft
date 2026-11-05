@@ -1,6 +1,6 @@
 "use client";
 
-import { Redo2, Save, Undo2, X } from "lucide-react";
+import { CircleHelp, Redo2, Save, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useContainerWidth, type Layout } from "react-grid-layout";
 import { BLOCK_DEFINITIONS, breakpointForWidth } from "@/lib/blocks";
@@ -14,6 +14,7 @@ import type { CreativeActions } from "./block-frame";
 import { EmptyState } from "./empty-state";
 import { InventoryDock } from "./inventory-dock";
 import { WorkspaceGrid } from "./workspace-grid";
+import { WorkspaceGuide } from "./workspace-guide";
 
 interface History {
   past: WorkspaceBlock[][];
@@ -23,7 +24,7 @@ interface History {
 
 export function WorkspaceView() {
   const { blocks, workspace, saveLayout, draftConfigs } = useWorkspaceData();
-  const { creativeMode, setCreativeMode } = useWorkspaceUI();
+  const { creativeMode, setCreativeMode, setGuideStep } = useWorkspaceUI();
   const { announce, notify } = useNotify();
   const { width, containerRef, mounted } = useContainerWidth();
   const breakpoint = breakpointForWidth(width || 1200);
@@ -163,6 +164,9 @@ export function WorkspaceView() {
           <p className="mr-auto font-semibold">
             Creative Mode
           </p>
+          <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={() => setGuideStep(1)}>
+            <CircleHelp size={16} aria-hidden="true" /> Guide
+          </button>
           <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={undo} disabled={!history?.past.length}>
             <Undo2 size={16} aria-hidden="true" /> Undo
           </button>
@@ -177,6 +181,8 @@ export function WorkspaceView() {
           </button>
         </div>
       ) : null}
+
+      <WorkspaceGuide />
 
       <div ref={containerRef}>
         {!creativeMode && visibleCount === 0 ? (

@@ -6,8 +6,10 @@ import { isHttpUrl } from "@/lib/schemas";
 import { openTasks } from "@/lib/task-helpers";
 import { CurrentStep } from "../blocks/next-step-block";
 import { FocusTimerBlock } from "../blocks/focus-timer-block";
+import { TaskBlockers } from "../blocks/task-blockers";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
+import { StartSupport } from "./start-support";
 
 // A temporary, simpler view of one task. It replaces the grid on screen only;
 // the saved layout is untouched, so exiting shows the workspace exactly as before.
@@ -59,6 +61,8 @@ export function FocusMode() {
               </p>
             ) : null}
             <CurrentStep task={task} />
+            <StartSupport task={task} onShowTimer={() => setShowTimer(true)} />
+            <TaskBlockers task={task} />
             {sourceLink || linkedNotes.length ? (
               <div>
                 <h4 className="font-semibold">Resources</h4>

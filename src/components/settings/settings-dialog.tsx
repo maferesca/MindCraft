@@ -117,6 +117,7 @@ function AppearanceSection() {
 
 function WorkspaceSection() {
   const { preferences, updatePreferences, workspace, renameWorkspace, resetLayout } = useWorkspaceData();
+  const { closeSettings, setGuideStep } = useWorkspaceUI();
   const { announce } = useNotify();
   const [name, setName] = useState(workspace?.name ?? "My workspace");
   const toggleTool = (type: BlockType) =>
@@ -174,7 +175,7 @@ function WorkspaceSection() {
         />
       </div>
 
-      <WorkStyleFields value={preferences} onChange={updatePreferences} fields={["planningStyle", "focusTime", "startHelp"]} />
+      <WorkStyleFields value={preferences} onChange={updatePreferences} fields={["focusTime", "startHelp"]} />
 
       <div className="flex flex-col gap-2">
         <label className="flex items-center gap-2">
@@ -185,6 +186,21 @@ function WorkspaceSection() {
           <input type="checkbox" className="h-5 w-5" checked={preferences.showStreak} onChange={(event) => updatePreferences({ showStreak: event.target.checked })} />
           Show the visit streak in the header
         </label>
+      </div>
+
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="font-bold">Workspace guide</h3>
+        <p className="mc-hint mt-1">Shows how to open the inventory, add blocks, move or resize them, and save.</p>
+        <button
+          type="button"
+          className="mc-btn mc-btn-secondary mt-3"
+          onClick={() => {
+            closeSettings();
+            setGuideStep(0);
+          }}
+        >
+          Show the guide
+        </button>
       </div>
 
       <div className="rounded-xl border border-border p-4">
@@ -278,7 +294,7 @@ function AiSection() {
           onChange={(value) => updatePreferences({ responseDetail: value as Preferences["responseDetail"] })}
         />
       </div>
-      <WorkStyleFields value={preferences} onChange={updatePreferences} fields={["planningStyle", "taskPresentation", "workMinutes"]} />
+      <WorkStyleFields value={preferences} onChange={updatePreferences} fields={["planningStyle", "communicationStyle", "taskPresentation", "workMinutes"]} />
       <SelectField label="Assistant language" value={preferences.language} onChange={(event) => updatePreferences({ language: event.target.value })}>
         <option value="auto">Same as my message</option>
         <option value="English">English</option>
@@ -295,8 +311,8 @@ function AiSection() {
           type="button"
           className="mc-btn mc-btn-secondary self-start"
           onClick={() => {
-            const { responseDetail, planningStyle, taskPresentation, focusTime, startHelp, workMinutes, language } = DEFAULT_PREFERENCES;
-            updatePreferences({ responseDetail, planningStyle, taskPresentation, focusTime, startHelp, workMinutes, language });
+            const { responseDetail, planningStyle, communicationStyle, taskPresentation, focusTime, startHelp, workMinutes, language } = DEFAULT_PREFERENCES;
+            updatePreferences({ responseDetail, planningStyle, communicationStyle, taskPresentation, focusTime, startHelp, workMinutes, language });
             announce("Assistant preferences cleared.");
           }}
         >
@@ -314,10 +330,10 @@ function AiSection() {
         <ul className="mt-2 list-disc pl-5">
           <li>your message and the last few messages of this chat</li>
           <li>your display name, so the assistant can call you by it</li>
-          <li>the selected task (title, description, expected result, deadline, priority, status, steps)</li>
+          <li>the selected task (title, description, expected result, deadline, priority, status, steps, and open missing information)</li>
           <li>the titles, status, and deadlines of your other open tasks</li>
           <li>which block types are in your workspace, including hidden ones</li>
-          <li>your response detail, language, planning style, task presentation, session length, and how you said you like to work</li>
+          <li>your response detail, language, assistance level, communication style, task presentation, session length, and how you said you like to work</li>
         </ul>
         <p className="mt-2">
           Notes, calendar events, your email, and your other settings are not sent. Voice recordings are sent once to be turned into text and are

@@ -9,6 +9,7 @@ import type { Breakpoint, WorkspaceBlock } from "@/lib/types";
 import { BlockIcon, blockHeaderBackground } from "../blocks/block-icon";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { IconButton } from "../ui/icon-button";
+import { BlockInfo } from "./block-info";
 
 export interface CreativeActions {
   moveEarlier: () => void;
@@ -63,6 +64,7 @@ export function BlockFrame({ block, breakpoint, creative, maximized = false, onT
         </h3>
         {creative ? <CreativeControls block={block} breakpoint={breakpoint} actions={creative} title={title} /> : null}
         <div className="flex items-center gap-0.5">
+          <BlockInfo type={block.block_type} />
           {!maximized ? (
             <IconButton
               size="sm"

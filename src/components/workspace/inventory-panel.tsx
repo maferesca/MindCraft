@@ -114,6 +114,9 @@ function InventoryCard({ item, onAdd, onDragTypeChange }: { item: CatalogItem; o
         <h4 className="min-w-0 flex-1 font-bold leading-tight">{item.name}</h4>
       </div>
       <p className="text-sm leading-snug">{item.description}</p>
+      <p className="mc-hint leading-snug">
+        <span className="font-semibold">Example:</span> {item.example}
+      </p>
       <BlockPreview id={item.id} />
       {item.options.length ? (
         <p className="mc-hint leading-snug">

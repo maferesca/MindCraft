@@ -10,6 +10,18 @@ const REQUEST_TIMEOUT_MS = 45_000;
 
 const OFFLINE = { ok: false as const, code: "offline", message: "You're offline. Your text is kept here; try again when you're connected." };
 
+// Causes that retrying can fix. Sign-in problems and rejected input keep their own message.
+const TEMPORARY_FAILURES = new Set(["rate_limited", "timeout", "model_unavailable", "provider_error", "invalid_output", "not_configured", "server_error", "network", "error"]);
+
+export function isTemporaryAiFailure(code: string) {
+  return TEMPORARY_FAILURES.has(code);
+}
+
+// "Your work is safe" is a promise, so it needs confirmation that everything was stored.
+export function aiUnavailableMessage(workConfirmedSaved: boolean) {
+  return `MindCraft's AI assistant is temporarily unavailable while we're testing the platform. ${workConfirmedSaved ? "Your work is safe. " : ""}Please try again in a moment or continue manually.`;
+}
+
 async function readError(response: Response) {
   try {
     const body = await response.json();

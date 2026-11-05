@@ -1,5 +1,6 @@
 import { BLOCK_TYPES } from "../preferences";
 import { proposalSchema, type AssistantContext, type Proposal } from "../schemas";
+import { normalizeTitle } from "../task-plan";
 
 // Words that show the user actually stated a date or a priority. If none
 // appear, any date or priority in a proposal was invented and is removed.
@@ -44,6 +45,42 @@ function supportedBySource(text: string | undefined, source: string) {
   return words.filter((word) => source.includes(word)).length / words.length >= 0.6;
 }
 
+// The buttons set how many steps fit their purpose. In chat, the person's own words decide.
+function stepLimit(context: AssistantContext) {
+  if (context.helpRequest === "steps" || context.helpRequest === "smaller") {
+    return { one_step: 1, short_list: 5, full_overview: 12 }[context.preferences?.planningStyle ?? ""] ?? 12;
+  }
+  return context.helpRequest ? 1 : 12;
+}
+
+// Steps go before the written work when they are what to do now, so the current step
+// changes. Guided steps asked for as a plan keep their place at the end.
+function stepsComeFirst(context: AssistantContext) {
+  if (!context.helpRequest) return false;
+  return !(context.helpRequest === "steps" && context.preferences?.planningStyle === "short_list");
+}
+
+// A missing label must not lose a useful suggestion, so the card gets a plain one.
+function withSummary(candidate: Record<string, unknown>, fallback: string) {
+  return typeof candidate.summary === "string" && candidate.summary.trim() ? candidate : { ...candidate, summary: fallback };
+}
+
+function repairSteps(candidate: Record<string, unknown>) {
+  const rest: Record<string, unknown> = { ...withSummary(candidate, "Suggested steps") };
+  delete rest.insert_first;
+  return Array.isArray(rest.steps) ? { ...rest, steps: rest.steps.slice(0, 24) } : rest;
+}
+
+function freshSteps(steps: string[], task: AssistantContext["task"], taskId: string) {
+  const seen = new Set(task?.id === taskId ? task.steps.map((step) => normalizeTitle(step.text)) : []);
+  return steps.filter((step) => {
+    const key = normalizeTitle(step);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function sanitizeProposals(raw: unknown, context: AssistantContext, userText: string): Proposal[] {
   if (!Array.isArray(raw)) return [];
   const knownTaskIds = new Set([context.task?.id, ...(context.otherTasks ?? []).map((task) => task.id)].filter(Boolean));
@@ -53,15 +90,30 @@ export function sanitizeProposals(raw: unknown, context: AssistantContext, userT
 
   for (const candidate of raw.slice(0, 10)) {
     if (result.length >= 3) break;
+    const kind = candidate && typeof candidate === "object" ? (candidate as { type?: unknown }).type : null;
     const repaired =
-      candidate && typeof candidate === "object" && (candidate as { type?: unknown }).type === "task_plan"
+      kind === "task_plan"
         ? repairTaskPlan(candidate as Record<string, unknown>, context)
-        : candidate;
+        : kind === "propose_steps"
+          ? repairSteps(candidate as Record<string, unknown>)
+          : kind === "record_missing_info"
+            ? withSummary(candidate as Record<string, unknown>, "Missing information")
+            : candidate;
     const parsed = proposalSchema.safeParse(repaired);
     if (!parsed.success) continue;
     const proposal = parsed.data;
 
-    if (proposal.type === "propose_steps" && !knownTaskIds.has(proposal.task_id)) continue;
+    if (proposal.type === "propose_steps") {
+      if (!knownTaskIds.has(proposal.task_id)) continue;
+      proposal.steps = freshSteps(proposal.steps, context.task, proposal.task_id).slice(0, stepLimit(context));
+      if (!proposal.steps.length) continue;
+      if (stepsComeFirst(context)) proposal.insert_first = true;
+    }
+    if (proposal.type === "record_missing_info") {
+      if (proposal.task_id !== context.task?.id) continue;
+      const recorded = (context.missingInformation ?? []).map(normalizeTitle);
+      if (recorded.includes(normalizeTitle(proposal.missing))) continue;
+    }
     if (proposal.type === "draft_clarification" && proposal.task_id && !knownTaskIds.has(proposal.task_id)) {
       delete proposal.task_id;
     }
@@ -85,6 +137,15 @@ export function sanitizeProposals(raw: unknown, context: AssistantContext, userT
     result.push(proposal);
   }
   return result;
+}
+
+// When someone asks where to begin, the answer is one action. If the model only
+// wrote it in the reply, this keeps it one press away from being saved to the task.
+export function ensureFirstAction(proposals: Proposal[], context: AssistantContext, reply: string): Proposal[] {
+  const task = context.task;
+  const step = reply.trim();
+  if (context.helpRequest !== "where_to_begin" || !task || proposals.length || !step || step.length > 300 || step.includes("\n")) return proposals;
+  return [{ type: "propose_steps", summary: "Suggested first action", task_id: task.id, steps: [step], insert_first: true }];
 }
 
 function isRealDate(value: string | undefined): boolean {

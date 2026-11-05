@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { askAssistant } from "@/lib/ai/client";
 import type { AssistantResult } from "@/lib/schemas";
 import { ProposalCard } from "../assistant/proposal-card";
-import { RateLimitNotice } from "../assistant/rate-limit-notice";
+import { AiErrorNotice } from "../assistant/ai-error-notice";
 import { useAssistantContext } from "../assistant/use-assistant-context";
 import { useLocalDraft } from "../assistant/use-local-draft";
 import { VoiceRecorder } from "../assistant/voice-recorder";
@@ -22,7 +22,7 @@ export function PlanningDialog() {
   const buildContext = useAssistantContext();
   const [text, setText] = useLocalDraft("planning");
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<{ message: string; rateLimited: boolean } | null>(null);
+  const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [result, setResult] = useState<{ data: AssistantResult; key: string } | null>(null);
   const autoSubmitted = useRef<string | null>(null);
   const openRef = useRef(planningOpen);
@@ -41,7 +41,7 @@ export function PlanningDialog() {
     const response = await askAssistant([...history, { role: "user", content: message }], buildContext("planning", null, [message]));
     setPending(false);
     if (!response.ok) {
-      setError({ message: response.message, rateLimited: response.code === "rate_limited" });
+      setError({ code: response.code, message: response.message });
       return;
     }
     const savedUser = await appendMessage("user", message);
@@ -116,19 +116,11 @@ export function PlanningDialog() {
       ) : null}
 
       {error ? (
-        <div className="mt-4 rounded-xl border-2 border-danger p-3" role="alert">
-          {error.rateLimited ? (
-            <RateLimitNotice messageKept={Boolean(text.trim())} />
-          ) : (
-            <>
-              <p className="font-semibold text-danger">{error.message}</p>
-              <p className="mc-hint">Your text is kept above.</p>
-            </>
-          )}
-          <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={() => submit(text)}>
-            <RotateCcw size={14} aria-hidden="true" /> Try again
+        <AiErrorNotice code={error.code} message={error.message} textKept={Boolean(text.trim())}>
+          <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm" onClick={() => submit(text)}>
+            <RotateCcw size={14} aria-hidden="true" /> Retry
           </button>
-        </div>
+        </AiErrorNotice>
       ) : null}
 
       {result ? (

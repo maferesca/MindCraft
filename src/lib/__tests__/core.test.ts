@@ -1,19 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { buildContextText } from "../ai/assistant-prompt";
-import { completionReserve } from "../ai/completion-reserve";
-import { sanitizeProposals, stripInlineMarkdown } from "../ai/proposal-guard";
-import { detectDeclines } from "../ai/client";
-import { CATALOG_ITEMS } from "../block-catalog";
+import { completionReserve, trimHistory } from "../ai/completion-reserve";
+import { ensureFirstAction, sanitizeProposals, stripInlineMarkdown } from "../ai/proposal-guard";
+import { aiUnavailableMessage, detectDeclines, isTemporaryAiFailure } from "../ai/client";
+import { CATALOG_ITEMS, catalogItemFor } from "../block-catalog";
 import { BLOCK_CAPABILITIES, blockPlacement, capabilityText } from "../block-capabilities";
 import { BLOCK_ORDER, isMinimized, positionsForBreakpoint, sortForPhone } from "../blocks";
 import { clearSessionData } from "../clear-session-data";
+import { RepositoryError, type Repository } from "../data/repository";
+import { createWriteTracker } from "../data/write-tracker";
 import { isWithinQuietHours, nextStreak } from "../dates";
 import { moveInOrder } from "../layout-edit";
 import { DEFAULT_PREFERENCES, normalizePreferences } from "../preferences";
 import { proposalSchema, taskInputSchema, type AssistantContext, type Proposal } from "../schemas";
 import { findNamedTask, isVagueTitle, proposalRecordId } from "../task-plan";
+import { stepWindow, taskBlockers } from "../task-helpers";
 import { THEME_IDS } from "../themes";
-import type { WorkspaceBlock } from "../types";
+import type { CheckIn, WorkspaceBlock } from "../types";
 
 const TASK_ID = "6f1c2c7e-6a43-4e0a-9d1b-2f6c2c1a9b10";
 
@@ -120,6 +123,163 @@ describe("AI proposal guard (acceptance checks 7 and 10)", () => {
     );
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe("propose_steps");
+  });
+});
+
+describe("assistance levels", () => {
+  const steps = [{ done: true }, { done: false }, { done: false }, { done: false }, { done: false }];
+
+  it("shows one step, every step, or a few at a time", () => {
+    expect(stepWindow(steps, "one_step")).toEqual({ shown: [steps[1]], doneHidden: 1, laterHidden: 3 });
+    expect(stepWindow(steps, "short_list")).toEqual({ shown: steps, doneHidden: 0, laterHidden: 0 });
+    expect(stepWindow(steps, "full_overview")).toEqual({ shown: [steps[1], steps[2]], doneHidden: 1, laterHidden: 2 });
+    expect(stepWindow(steps, "full_overview", 1).laterHidden).toBe(1);
+  });
+
+  it("keeps every saved choice when the level changes", () => {
+    expect(normalizePreferences({ planningStyle: "one_step" }).planningStyle).toBe("one_step");
+    expect(normalizePreferences({ communicationStyle: "shouting" }).communicationStyle).toBe(DEFAULT_PREFERENCES.communicationStyle);
+  });
+});
+
+describe("help request proposals", () => {
+  const task = { id: TASK_ID, title: "Report", status: "todo", steps: [{ text: "Open the file", done: false }] };
+  const raw = [{ type: "propose_steps", summary: "Steps", task_id: TASK_ID, steps: ["open the  FILE", "Write the intro", "Add data", "Check totals", "Send it", "Archive it"] }];
+  const steps = (context: Partial<AssistantContext>) => {
+    const [proposal] = sanitizeProposals(raw, { mode: "help_me_start", task, ...context }, "help");
+    return proposal?.type === "propose_steps" ? proposal : null;
+  };
+  const at = (planningStyle: string) => ({ responseDetail: "brief" as const, language: "auto", planningStyle });
+
+  it("applies the assistance level and drops steps already on the task", () => {
+    expect(steps({ helpRequest: "steps", preferences: at("one_step") })?.steps).toEqual(["Write the intro"]);
+    expect(steps({ helpRequest: "steps", preferences: at("short_list") })?.steps).toHaveLength(5);
+    expect(steps({ helpRequest: "steps", preferences: at("full_overview") })?.steps).toHaveLength(5);
+  });
+
+  it("puts a first action ahead of the written steps, and only for that request", () => {
+    expect(steps({ helpRequest: "where_to_begin", preferences: at("full_overview") })).toMatchObject({ steps: ["Write the intro"], insert_first: true });
+    expect(steps({ helpRequest: "steps", preferences: at("short_list") })?.insert_first).toBeUndefined();
+    expect(steps({})?.insert_first).toBeUndefined();
+  });
+
+  it("offers a first action written only in the reply", () => {
+    const context: AssistantContext = { mode: "help_me_start", helpRequest: "where_to_begin", task };
+    expect(ensureFirstAction([], context, "Open the agenda.")).toMatchObject([{ type: "propose_steps", task_id: TASK_ID, steps: ["Open the agenda."], insert_first: true }]);
+    expect(ensureFirstAction([], { ...context, helpRequest: "tired" }, "Take a break.")).toEqual([]);
+    expect(ensureFirstAction([], context, "First line.\nSecond line.")).toEqual([]);
+  });
+
+  it("keeps a useful suggestion that has no summary", () => {
+    const [proposal] = sanitizeProposals([{ type: "propose_steps", task_id: TASK_ID, steps: ["Write the intro"] }], { mode: "chat", task }, "help");
+    expect(proposal).toMatchObject({ summary: "Suggested steps", steps: ["Write the intro"] });
+  });
+
+  it("ignores a model that tries to set the position itself", () => {
+    const [proposal] = sanitizeProposals([{ ...raw[0], insert_first: true }], { mode: "chat", task }, "help");
+    expect(proposal.type === "propose_steps" && proposal.insert_first).toBeUndefined();
+  });
+
+  it("records missing information only on the selected task", () => {
+    const entry = { type: "record_missing_info", summary: "Record", task_id: TASK_ID, missing: "The audience" };
+    expect(sanitizeProposals([entry], { mode: "missing_information", task }, "x")).toHaveLength(1);
+    expect(sanitizeProposals([entry], { mode: "missing_information", task: null, otherTasks: [{ id: TASK_ID, title: "Report", status: "todo", due_date: null }] }, "x")).toHaveLength(0);
+  });
+
+  it("gives each Focus Mode option its own instruction without guessing a cause", () => {
+    const text = buildContextText({ mode: "help_me_start", helpRequest: "tired", task });
+    expect(text).toContain("short break");
+    expect(text).toContain("do not guess at a medical or emotional cause");
+    expect(text).not.toContain("you must include one task_plan");
+  });
+
+  it("leaves block capabilities out of a button's request", () => {
+    expect(buildContextText({ mode: "help_me_start", helpRequest: "tired", task, visibleBlocks: ["notes"] })).not.toContain("Workspace block capabilities");
+    expect(buildContextText({ mode: "chat", task, visibleBlocks: ["notes"] })).toContain("Workspace block capabilities");
+  });
+
+  it("states the communication style without changing the task", () => {
+    const text = buildContextText({ mode: "chat", task, preferences: { ...at("short_list"), communicationStyle: "direct" } });
+    expect(text).toContain("no pleasantries");
+    expect(text).toContain('"title":"Report"');
+  });
+});
+
+describe("missing information on a task", () => {
+  const entry = (id: string, extra: Partial<CheckIn>): CheckIn => ({
+    id,
+    user_id: "u",
+    kind: "help",
+    task_id: TASK_ID,
+    completed_text: null,
+    next_text: null,
+    blocking: id,
+    support: "x",
+    help_status: "open",
+    follow_ups: [],
+    created_at: "2026-11-01T00:00:00Z",
+    updated_at: "2026-11-01T00:00:00Z",
+    ...extra,
+  });
+
+  it("separates what still applies from what was resolved", () => {
+    const { open, resolved } = taskBlockers(
+      [entry("waiting", { help_status: "waiting" }), entry("done", { help_status: "resolved" }), entry("other", { task_id: null }), entry("progress", { kind: "progress" })],
+      TASK_ID,
+    );
+    expect(open.map((item) => item.id)).toEqual(["waiting"]);
+    expect(resolved.map((item) => item.id)).toEqual(["done"]);
+  });
+});
+
+describe("AI failure message", () => {
+  it("says work is safe only when that is confirmed", () => {
+    expect(aiUnavailableMessage(true)).toBe("MindCraft's AI assistant is temporarily unavailable while we're testing the platform. Your work is safe. Please try again in a moment or continue manually.");
+    expect(aiUnavailableMessage(false)).not.toContain("safe");
+  });
+
+  it("keeps the specific message for problems a retry cannot fix", () => {
+    expect(isTemporaryAiFailure("model_unavailable")).toBe(true);
+    expect(isTemporaryAiFailure("rate_limited")).toBe(true);
+    expect(isTemporaryAiFailure("ai_disabled_in_demo")).toBe(false);
+    expect(isTemporaryAiFailure("unauthenticated")).toBe(false);
+  });
+});
+
+describe("write confirmation", () => {
+  const repoWith = (update: () => Promise<unknown>, insert: () => Promise<unknown> = async () => ({})) => ({ update, insert } as unknown as Repository);
+
+  it("stays unconfirmed until a failed write succeeds", async () => {
+    const tracker = createWriteTracker();
+    let fail = true;
+    const repo = tracker.wrap(repoWith(async () => {
+      if (fail) throw new Error("no");
+      return {};
+    }));
+    expect(tracker.isConfirmed()).toBe(true);
+    await expect(repo.update("tasks", "1", {})).rejects.toThrow();
+    expect(tracker.isConfirmed()).toBe(false);
+    fail = false;
+    await repo.update("tasks", "1", {});
+    expect(tracker.isConfirmed()).toBe(true);
+  });
+
+  it("is unconfirmed while a write is running", async () => {
+    const tracker = createWriteTracker();
+    let finish = () => {};
+    const repo = tracker.wrap(repoWith(() => new Promise<void>((resolve) => { finish = resolve; })));
+    const pending = repo.update("tasks", "1", {});
+    expect(tracker.isConfirmed()).toBe(false);
+    finish();
+    await pending;
+    expect(tracker.isConfirmed()).toBe(true);
+  });
+
+  it("treats a duplicate as stored", async () => {
+    const tracker = createWriteTracker();
+    const repo = tracker.wrap(repoWith(async () => ({}), async () => { throw new RepositoryError("duplicate", "23505"); }));
+    await expect(repo.insert("tasks", { id: "1" })).rejects.toThrow();
+    expect(tracker.isConfirmed()).toBe(true);
   });
 });
 
@@ -285,10 +445,22 @@ describe("minimized blocks", () => {
 
 });
 
+describe("chat history sent to the provider", () => {
+  const message = (content: string) => ({ role: "user", content });
+
+  it("drops the oldest messages first", () => {
+    expect(trimHistory([message("a".repeat(3000)), message("b".repeat(2000)), message("c".repeat(2000))], 4500).map((item) => item.content[0])).toEqual(["b", "c"]);
+  });
+
+  it("always keeps the latest message", () => {
+    expect(trimHistory([message("a"), message("b".repeat(4000))], 100)).toHaveLength(1);
+  });
+});
+
 describe("Groq completion reserve", () => {
   it("keeps the prompt and the reserve inside the token limit", () => {
-    expect(completionReserve(21000, 8000)).toBe(2000);
-    expect(Math.ceil(21000 / 3.5) + completionReserve(21000, 8000)).toBeLessThanOrEqual(8000);
+    expect(completionReserve(21000, 8000)).toBe(1437);
+    expect(Math.ceil(21000 / 3.2) + completionReserve(21000, 8000)).toBeLessThanOrEqual(8000);
   });
 
   it("uses a higher limit when one is available and always leaves room to answer", () => {
@@ -328,6 +500,13 @@ describe("clearing session data on sign-out", () => {
 });
 
 describe("block catalog", () => {
+  it("gives every block a description and an example", () => {
+    for (const type of BLOCK_ORDER) {
+      expect(catalogItemFor(type).description).toBeTruthy();
+      expect(catalogItemFor(type).example).toBeTruthy();
+    }
+  });
+
   it("offers every block type exactly once", () => {
     expect(CATALOG_ITEMS.map((item) => item.blockType).sort()).toEqual([...BLOCK_ORDER].sort());
   });

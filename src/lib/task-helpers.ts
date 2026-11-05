@@ -1,5 +1,6 @@
 import { format, parseISO } from "date-fns";
-import type { Task, TaskPriority, TaskStatus, TaskStep } from "./types";
+import type { Preferences } from "./preferences";
+import type { CheckIn, Task, TaskPriority, TaskStatus, TaskStep } from "./types";
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: "To do",
@@ -21,6 +22,31 @@ export const TASK_FILTER_LABELS: Record<TaskFilter, string> = {
   overdue: "Overdue",
   completed: "Completed",
 };
+
+// Which steps an assistance level shows. Nothing is removed from the task: changing
+// level only changes this view, so progress is never lost.
+export function stepWindow<T extends { done: boolean }>(steps: T[], level: Preferences["planningStyle"], extraShown = 0) {
+  if (level === "short_list") return { shown: steps, doneHidden: 0, laterHidden: 0 };
+  const pending = steps.filter((step) => !step.done);
+  const shown = pending.slice(0, level === "one_step" ? 1 : 2 + extraShown);
+  return { shown, doneHidden: steps.length - pending.length, laterHidden: pending.length - shown.length };
+}
+
+export function stepRequestMessage(level: Preferences["planningStyle"], title: string) {
+  if (level === "one_step") return `Give me one clear next step for "${title}".`;
+  if (level === "short_list") return `Give me 3 to 5 clear steps for "${title}".`;
+  return `Break "${title}" into very small, explicit steps.`;
+}
+
+// The database requires both fields on a help request, and a person may know what is
+// missing before knowing who can help. The interface treats this value as empty.
+export const NO_SUPPORT_YET = "Not decided yet";
+
+// Missing information for one task, oldest first, split by whether it still applies.
+export function taskBlockers(checkIns: CheckIn[], taskId: string) {
+  const entries = checkIns.filter((entry) => entry.kind === "help" && entry.task_id === taskId).sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return { open: entries.filter((entry) => entry.help_status !== "resolved"), resolved: entries.filter((entry) => entry.help_status === "resolved") };
+}
 
 export function timeLabel(time: string) {
   return time.slice(0, 5);

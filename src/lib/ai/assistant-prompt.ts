@@ -57,7 +57,8 @@ Do not restrict every answer to motivational advice or questions.
 
 3. VOICE AND RESPONSE LENGTH
 
-- Be warm, calm, specific, respectful, and practical.
+- Be calm, specific, respectful, and practical. How warm or brief to sound
+  follows the saved communicationStyle.
 - Speak adult-to-adult. Avoid infantilizing language, exaggerated praise,
   guilt, pressure, and repetitive reassurance.
 - When a display name is supplied, address the person by it naturally: when
@@ -241,8 +242,8 @@ Do not restrict every answer to motivational advice or questions.
 13. PROPOSALS AND APPLICATION COMPATIBILITY
 
 - Allowed proposal types:
-  task_plan, create_tasks, propose_steps, suggest_blocks, suggest_layout,
-  suggest_preferences, draft_clarification.
+  task_plan, create_tasks, propose_steps, record_missing_info, suggest_blocks,
+  suggest_layout, suggest_preferences, draft_clarification.
 - Allowed block types:
   task_list, calendar, next_step, focus_timer, notes, resources, check_in.
 - Use only fields and enum values defined in the supplied response schema.
@@ -259,6 +260,9 @@ Do not restrict every answer to motivational advice or questions.
 - propose_steps: use only for the relevant selected task, using its exact
   context ID. Suggest useful editable steps without duplicating existing
   steps unnecessarily.
+- record_missing_info: use for the selected task when a specific piece of
+  information is missing. missing says what it is; support says who or what
+  could provide it, if known. Never repeat something already recorded.
 - task_plan: the default for one piece of work the person wants to clarify,
   plan, or capture. See section 13A. Use create_tasks only to capture several
   clearly identified tasks at once.
@@ -314,6 +318,8 @@ Do not restrict every answer to motivational advice or questions.
   explains why no block fits. Give exactly one primary block with a brief
   practical reason based on a listed capability.
 - Do not mention a block in reply unless the proposal includes it.
+- In reply and summary, call a block by its label, such as Task guide. Never
+  show a type id such as next_step.
 - alternative_block: only when it would really be useful.
 - A block listed as hidden or available is not in the workspace yet. Never say
   it already is. The interface asks the person to confirm adding it.
@@ -324,14 +330,17 @@ Do not restrict every answer to motivational advice or questions.
 
 - responseDetail: brief means the shortest useful answer; detailed means
   include reasoning and examples.
-- planningStyle: one_step means give only the next step; short_list means a
-  few items; full_overview means the whole plan.
+- planningStyle is the assistance level. one_step (Quick Start) means only the
+  next step; short_list (Guided) means 3 to 5 structured steps; full_overview
+  (Detailed) means very small, explicit steps.
+- communicationStyle changes wording only. Never let it change task facts,
+  requirements, steps, deadlines, or the amount of work.
 - taskPresentation: checklist means present actions as a list; short_text means
   short paragraphs; not_set means no saved preference.
 - focusMinutes: use it as the person's session length when estimating.
 - Ask about a missing preference only if it would change this answer, at most
   once. Do not ask about preferences that are already saved.
-- Offer no praise by default. Do not assume emotions or diagnoses.
+- Offer no empty praise. Do not assume emotions, health, or diagnoses.
 
 14. OUTPUT CONTRACT
 
@@ -385,7 +394,21 @@ const DETAIL_INSTRUCTIONS: Record<string, string> = {
 const STYLE_INSTRUCTIONS: Record<string, string> = {
   one_step: "Give only the single next action in reply. Never list several steps.",
   short_list: "Keep any plan in reply to three or four items.",
-  full_overview: "Show the whole plan in reply.",
+  full_overview: "Break any plan in reply into very small, explicit steps of one action each.",
+};
+const STYLE_FOR_TONE: Record<string, string> = {
+  supportive: "Sound friendly, encouraging, and patient.",
+  direct: "Be short, specific, and action-oriented, with no pleasantries.",
+  neutral: "Stay clear, factual, and minimal, with no encouragement.",
+};
+const HELP_REQUEST_GUIDANCE: Record<NonNullable<AssistantContext["helpRequest"]>, string> = {
+  steps: "The person pressed a button asking for steps for the selected task. Return one propose_steps proposal at their assistance level, with new steps only, and no task_plan.",
+  smaller: "The person says the current step feels too big. Return one propose_steps proposal that splits that step into smaller actions, and no task_plan.",
+  where_to_begin: "The person does not know where to begin. Suggest one small first action and return it as a propose_steps proposal with exactly one step, and no task_plan.",
+  overwhelmed: "The person feels overwhelmed by this task. Simplify it: name the single step to focus on and say the rest can wait. Add no extra work. If no suitable step exists, return one propose_steps proposal with exactly one step. No task_plan.",
+  distracted: "The person keeps getting distracted. Suggest a short focus session of about 10 minutes on the current step, using the timer shown in Focus Mode. If timers were declined, suggest a different way to narrow the work. No task_plan.",
+  tired: "The person is tired or unmotivated. Offer brief encouragement and let them choose between a short break and an easier way to approach the task. Do not push them to continue. No task_plan.",
+  missing_information: "The person is missing information. From the task record, identify what is missing and return one record_missing_info proposal. If you cannot tell, ask one short question. No task_plan.",
 };
 const PRESENTATION_INSTRUCTIONS: Record<string, string> = {
   checklist: "Present actions as a list.",
@@ -396,6 +419,7 @@ function replyInstructions(preferences: NonNullable<AssistantContext["preference
   return [
     DETAIL_INSTRUCTIONS[preferences.responseDetail],
     STYLE_INSTRUCTIONS[preferences.planningStyle],
+    STYLE_FOR_TONE[preferences.communicationStyle ?? ""],
     PRESENTATION_INSTRUCTIONS[preferences.taskPresentation ?? ""],
   ].filter(Boolean);
 }
@@ -425,6 +449,7 @@ export function buildContextText(context: AssistantContext, firstMessage = false
           responseDetail: context.preferences.responseDetail,
           language: context.preferences.language,
           planningStyle: context.preferences.planningStyle,
+          communicationStyle: context.preferences.communicationStyle,
           taskPresentation: context.preferences.taskPresentation,
           // Stated work habits. Use them to tailor suggestions, never to infer
           // traits or to override what the person asks for now.
@@ -441,8 +466,10 @@ export function buildContextText(context: AssistantContext, firstMessage = false
     lines.push(`Follow in this reply: ${replyInstructions(context.preferences).join(" ")}`);
   }
   lines.push(
-    "If the latest message describes work the person needs to do and no material " +
-      "detail is missing, you must include one task_plan proposal with recommended_block.",
+    context.helpRequest
+      ? `${HELP_REQUEST_GUIDANCE[context.helpRequest]} Respond only to what they selected, and do not guess at a medical or emotional cause.`
+      : "If the latest message describes work the person needs to do and no material " +
+          "detail is missing, you must include one task_plan proposal with recommended_block.",
   );
 
   if (context.declined?.length) {
@@ -500,7 +527,9 @@ export function buildContextText(context: AssistantContext, firstMessage = false
     );
   }
 
-  if (context.visibleBlocks) {
+  // A button's request recommends no block, so it skips this text and stays under
+  // the provider's token limit when two requests come close together.
+  if (context.visibleBlocks && !context.helpRequest) {
     const placed = BLOCK_ORDER.map((type) => ({
       type,
       placement: blockPlacement(
@@ -570,6 +599,7 @@ export const ASSISTANT_RESPONSE_SCHEMA = {
               "suggest_layout",
               "suggest_preferences",
               "draft_clarification",
+              "record_missing_info",
             ],
           },
 
@@ -599,6 +629,16 @@ export const ASSISTANT_RESPONSE_SCHEMA = {
               "Complete clarification draft ready to copy and edit. " +
               "For a requested email, include a subject, greeting, " +
               "brief context, clear request, and closing.",
+          },
+
+          missing: {
+            type: "string",
+            description: "For record_missing_info: what information is missing.",
+          },
+
+          support: {
+            type: "string",
+            description: "For record_missing_info: who or what could provide it, if known.",
           },
 
           steps: {
@@ -801,6 +841,11 @@ export const ASSISTANT_RESPONSE_SCHEMA = {
               planningStyle: {
                 type: "string",
                 enum: ["one_step", "short_list", "full_overview"],
+              },
+
+              communicationStyle: {
+                type: "string",
+                enum: ["supportive", "direct", "neutral"],
               },
 
               taskPresentation: {

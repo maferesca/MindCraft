@@ -1,120 +1,120 @@
 "use client";
 
-import { Check, CircleHelp, Minimize2, Pencil, Plus } from "lucide-react";
+import { Check, ListChecks, Minimize2, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { stepTextSchema } from "@/lib/schemas";
-import { currentStep, stepsForTask } from "@/lib/task-helpers";
-import type { Task, TaskStep } from "@/lib/types";
+import { ASSISTANCE_LEVELS, type Preferences } from "@/lib/preferences";
+import { currentStep, stepProgressLabel, stepRequestMessage, stepWindow, stepsForTask } from "@/lib/task-helpers";
+import type { Task } from "@/lib/types";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
+import { ChoiceGroup } from "../ui/choice-group";
 import { useNotify } from "../ui/notifications";
+import { ReadAloud } from "../ui/read-aloud";
+import { ChecklistEditor } from "./checklist-editor";
+import { StepFlow } from "./step-flow";
 
-// Compact current-step view used in Focus Mode. It reads the same step records as
-// the Task guide block, and completing a step never completes the task.
-export function CurrentStep({ task, compact = false }: { task: Task; compact?: boolean }) {
-  const { steps, addStep, updateStep } = useWorkspaceData();
-  const { openAssistant, openMissingInfo } = useWorkspaceUI();
+const LEVEL_OPTIONS = (Object.keys(ASSISTANCE_LEVELS) as Array<Preferences["planningStyle"]>).map(
+  (level) => [level, ASSISTANCE_LEVELS[level].label] as [Preferences["planningStyle"], string],
+);
+const SUGGEST_LABELS: Record<Preferences["planningStyle"], string> = {
+  one_step: "Suggest a next step",
+  short_list: "Suggest 3 to 5 steps",
+  full_overview: "Break into small steps",
+};
+
+// Step guidance shared by the Task guide block and Focus Mode. The assistance level
+// and view are personal preferences that only change what is shown: the steps and
+// their progress stay on the task. Completing a step never completes the task.
+export function CurrentStep({ task, onAllDone }: { task: Task; onAllDone?: () => void }) {
+  const { steps, preferences, updatePreferences, addStep, updateStep, deleteStep } = useWorkspaceData();
+  const { openAssistant } = useWorkspaceUI();
   const { announce } = useNotify();
+  const [editing, setEditing] = useState(false);
+  const [extraShown, setExtraShown] = useState(0);
+  const level = preferences.planningStyle;
+  const taskSteps = stepsForTask(steps, task.id);
   const step = currentStep(steps, task.id);
-  const doneCount = stepsForTask(steps, task.id).filter((item) => item.done).length;
-  const [editing, setEditing] = useState<"new" | "edit" | null>(null);
-  const [text, setText] = useState("");
+  const doneCount = taskSteps.filter((item) => item.done).length;
+  const { shown, doneHidden, laterHidden } = stepWindow(taskSteps, level, extraShown);
+  const spoken = shown.filter((item) => !item.done).map((item) => item.text);
 
-  async function save() {
-    const parsed = stepTextSchema.safeParse(text);
-    if (!parsed.success) return;
-    if (editing === "edit" && step) await updateStep(step.id, { text: parsed.data });
-    else await addStep(task.id, parsed.data);
-    setEditing(null);
-    setText("");
-  }
-
-  async function complete(current: TaskStep) {
-    await updateStep(current.id, { done: true });
+  async function complete() {
+    if (!step) return;
+    await updateStep(step.id, { done: true });
     announce("Step done. The task stays open until you mark it done.");
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="rounded-xl bg-primary-soft p-3">
-        <p className="text-sm font-semibold text-text-muted">Current step</p>
-        {editing ? (
-          <div className="mt-1 flex flex-col gap-2">
-            <label htmlFor={`step-text-${task.id}`} className="sr-only">
-              Step
-            </label>
-            <textarea
-              id={`step-text-${task.id}`}
-              className="mc-input"
-              rows={2}
-              maxLength={500}
-              value={text}
-              autoFocus
-              onChange={(event) => setText(event.target.value)}
-            />
-            <div className="flex gap-2">
-              <button type="button" className="mc-btn mc-btn-primary mc-btn-sm" onClick={save}>
-                Save step
-              </button>
-              <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={() => setEditing(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : step ? (
-          <p className={`mt-1 font-semibold ${compact ? "" : "text-lg"}`}>{step.text}</p>
-        ) : (
-          <p className="mt-1">{doneCount ? "All written steps are done." : "No step written yet."}</p>
-        )}
+      <div className="flex flex-wrap items-center gap-2">
+        <ChoiceGroup label="Assistance level" value={level} options={LEVEL_OPTIONS} onChange={(planningStyle) => updatePreferences({ planningStyle })} />
+        <ChoiceGroup
+          label="Step view"
+          value={preferences.stepLayout}
+          options={[["list", "List"], ["visual", "Visual"]]}
+          onChange={(stepLayout) => updatePreferences({ stepLayout })}
+        />
+        <ReadAloud text={spoken.join(". ")} label={spoken.length > 1 ? "Read these steps aloud" : "Read this step aloud"} />
       </div>
-      {!editing ? (
-        <div className="flex flex-wrap gap-2">
-          {step ? (
-            <>
-              <button type="button" className="mc-btn mc-btn-primary mc-btn-sm" onClick={() => complete(step)}>
-                <Check size={16} aria-hidden="true" /> Step done
-              </button>
-              <button
-                type="button"
-                className="mc-btn mc-btn-secondary mc-btn-sm"
-                onClick={() => {
-                  setText(step.text);
-                  setEditing("edit");
-                }}
-              >
-                <Pencil size={16} aria-hidden="true" /> Edit
-              </button>
-              <button
-                type="button"
-                className="mc-btn mc-btn-secondary mc-btn-sm"
-                onClick={() =>
-                  openAssistant({
-                    mode: "help_me_start",
-                    taskId: task.id,
-                    autoSend: true,
-                    message: `This step feels too big: "${step.text}". Could you suggest smaller steps?`,
-                  })
-                }
-              >
-                <Minimize2 size={16} aria-hidden="true" /> Make this smaller
-              </button>
-            </>
+
+      {taskSteps.length ? (
+        <p className="text-sm font-semibold" aria-live="polite">
+          {stepProgressLabel(doneCount, taskSteps.length)}
+        </p>
+      ) : null}
+
+      {editing || !taskSteps.length ? (
+        <ChecklistEditor items={taskSteps} noun="step" onAdd={(text) => addStep(task.id, text)} onChange={updateStep} onDelete={deleteStep} />
+      ) : (
+        <>
+          <StepFlow steps={shown} allSteps={taskSteps} currentId={step?.id ?? null} layout={preferences.stepLayout} />
+          {doneHidden && level !== "short_list" && step ? <p className="mc-hint">{doneHidden} done so far.</p> : null}
+          {!step ? (
+            <div className="rounded-xl bg-surface-muted p-3" role="status">
+              <p className="font-semibold">All written steps are done.</p>
+              {onAllDone ? (
+                <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={onAllDone}>
+                  Open review checklist
+                </button>
+              ) : null}
+            </div>
           ) : null}
+          {laterHidden && level === "full_overview" ? (
+            <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm self-start" onClick={() => setExtraShown((value) => value + 1)}>
+              Show the next step ({laterHidden} more)
+            </button>
+          ) : null}
+        </>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {step && !editing ? (
+          <button type="button" className="mc-btn mc-btn-primary mc-btn-sm" onClick={complete}>
+            <Check size={16} aria-hidden="true" /> Step done
+          </button>
+        ) : null}
+        {step ? (
           <button
             type="button"
             className="mc-btn mc-btn-secondary mc-btn-sm"
-            onClick={() => {
-              setText("");
-              setEditing("new");
-            }}
+            onClick={() => openAssistant({ mode: "help_me_start", taskId: task.id, autoSend: true, helpRequest: "smaller", message: `This step feels too big: "${step.text}". Could you suggest smaller steps?` })}
           >
-            <Plus size={16} aria-hidden="true" /> {step ? "Add step" : "Write a step"}
+            <Minimize2 size={16} aria-hidden="true" /> Make this smaller
           </button>
-          <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={() => openMissingInfo(task.id)}>
-            <CircleHelp size={16} aria-hidden="true" /> Missing information
+        ) : null}
+        <button
+          type="button"
+          className="mc-btn mc-btn-secondary mc-btn-sm"
+          onClick={() => openAssistant({ mode: "help_me_start", taskId: task.id, autoSend: true, helpRequest: "steps", message: stepRequestMessage(level, task.title) })}
+        >
+          <Sparkles size={16} aria-hidden="true" /> {SUGGEST_LABELS[level]}
+        </button>
+        {taskSteps.length ? (
+          <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" aria-pressed={editing} onClick={() => setEditing((value) => !value)}>
+            <ListChecks size={16} aria-hidden="true" /> {editing ? "Done editing" : "Edit steps"}
           </button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }
