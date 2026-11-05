@@ -1,9 +1,9 @@
 "use client";
 
 import { DropdownMenu } from "radix-ui";
-import { CircleHelp, Focus, ListChecks, MessageCircleQuestion, Minimize2, MoreHorizontal, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowRightLeft, CircleHelp, Focus, ListChecks, MessageCircleQuestion, Minimize2, MoreHorizontal, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { PRIORITY_LABELS, STATUS_LABELS, TASK_FILTER_LABELS, filterTasks, formatDeadline, isOverdue, sortTasks, type TaskFilter, type TaskSort } from "@/lib/task-helpers";
+import { PRIORITY_LABELS, STATUS_LABELS, TASK_FILTER_LABELS, filterTasks, formatDeadline, isOverdue, sortTasks, taskBlockIdOf, taskBlockOptions, tasksForBlock, type TaskFilter, type TaskSort } from "@/lib/task-helpers";
 import type { Task, TaskStatus, WorkspaceBlock } from "@/lib/types";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
@@ -24,10 +24,12 @@ const EMPTY_TEXT: Record<TaskFilter, string> = {
 };
 
 export function TaskListBlock({ block }: { block: WorkspaceBlock }) {
-  const { tasks } = useWorkspaceData();
+  const { tasks: allTasks, blocks } = useWorkspaceData();
   const { openTaskEditor } = useWorkspaceUI();
   const today = useToday();
-  const [config, setConfig] = useBlockConfig(block, { view: "list" as "list" | "board", filter: "all" as TaskFilter, sort: "deadline" as TaskSort });
+  const [config, setConfig] = useBlockConfig(block, { view: "list" as "list" | "board", filter: "all" as TaskFilter, sort: "deadline" as TaskSort, description: "" });
+  const tasks = tasksForBlock(allTasks, block.id, blocks);
+  const unsaved = block.id.startsWith("new-");
   const filtered = filterTasks(tasks, config.filter, today);
   // All means incomplete tasks, but the board still needs a working Done column.
   const onBoard = config.view === "board" && config.filter === "all" ? tasks : filtered;
@@ -35,8 +37,9 @@ export function TaskListBlock({ block }: { block: WorkspaceBlock }) {
 
   return (
     <div className="flex h-full flex-col gap-2">
+      {config.description ? <p className="mc-hint whitespace-pre-wrap">{config.description}</p> : null}
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="mc-btn mc-btn-primary mc-btn-sm" onClick={() => openTaskEditor(null)}>
+        <button type="button" className="mc-btn mc-btn-primary mc-btn-sm" disabled={unsaved} onClick={() => openTaskEditor(null, undefined, block.id)}>
           <Plus size={16} aria-hidden="true" /> Add task
         </button>
         <ChoiceGroup label="Task view" value={config.view} options={[["list", "List"], ["board", "Board"]]} onChange={(view) => setConfig({ view })} />
@@ -64,7 +67,7 @@ export function TaskListBlock({ block }: { block: WorkspaceBlock }) {
 
       {tasks.length === 0 ? (
         <div className="py-2">
-          <p className="mc-hint">No tasks yet. Add your first task to get started.</p>
+          <p className="mc-hint">{unsaved ? "Save the layout to start adding tasks here." : "No tasks here yet. Tasks you add stay in this block."}</p>
         </div>
       ) : config.view === "board" ? (
         <TaskBoard tasks={visible} today={today} />
@@ -203,9 +206,16 @@ function TaskBoard({ tasks, today }: { tasks: Task[]; today: string }) {
 }
 
 function TaskMenu({ task }: { task: Task }) {
-  const { deleteTask, restoreTask } = useWorkspaceData();
+  const { deleteTask, restoreTask, updateTask, blocks } = useWorkspaceData();
   const { openAssistant, openMissingInfo, enterFocus } = useWorkspaceUI();
   const { notify } = useNotify();
+  const currentBlockId = taskBlockIdOf(task, blocks);
+  const destinations = taskBlockOptions(blocks).filter((option) => option.id !== currentBlockId);
+
+  // The same task record keeps its details, steps, and links.
+  async function moveTo(option: { id: string; label: string }) {
+    if (await updateTask(task.id, { block_id: option.id })) notify(`Moved to ${option.label}.`);
+  }
 
   async function handleDelete() {
     const snapshot = await deleteTask(task.id);
@@ -246,6 +256,11 @@ function TaskMenu({ task }: { task: Task }) {
           <DropdownMenu.Item className="mc-menu-item" onSelect={() => enterFocus(task.id)}>
             <Focus size={16} aria-hidden="true" /> Focus on this task
           </DropdownMenu.Item>
+          {destinations.map((option) => (
+            <DropdownMenu.Item key={option.id} className="mc-menu-item" onSelect={() => moveTo(option)}>
+              <ArrowRightLeft size={16} aria-hidden="true" /> Move to {option.label}
+            </DropdownMenu.Item>
+          ))}
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
           <DropdownMenu.Item className="mc-menu-item text-danger" onSelect={handleDelete}>
             <Trash2 size={16} aria-hidden="true" /> Delete task

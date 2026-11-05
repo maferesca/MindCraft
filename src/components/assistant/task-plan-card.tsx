@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { BLOCK_CAPABILITIES, PLACEMENT_LABELS, blockPlacement } from "@/lib/block-capabilities";
 import { BLOCK_DEFINITIONS, BLOCK_ORDER } from "@/lib/blocks";
 import { proposalSchema, TASK_PLAN_FIELDS, type Proposal } from "@/lib/schemas";
-import { PRIORITY_LABELS, formatDueDate } from "@/lib/task-helpers";
+import { PRIORITY_LABELS, fallbackTaskBlockId, formatDueDate, taskBlockOptions } from "@/lib/task-helpers";
 import { isVagueTitle, normalizeTitle, proposalRecordId } from "@/lib/task-plan";
 import type { BlockType } from "@/lib/types";
 import { useWorkspaceData } from "../providers/workspace-data";
@@ -65,6 +65,8 @@ export function TaskPlanCard({ proposal, storageKey }: { proposal: TaskPlanPropo
   const repeatedTitle = !draft.task_id && outcome === "pending" && tasks.some((item) => item.status !== "done" && normalizeTitle(item.title) === normalizeTitle(task.title));
   const longerThanSession = (task.estimated_minutes ?? 0) > preferences.workMinutes * 2;
   const pending = outcome === "pending";
+  const blockOptions = taskBlockOptions(blocks);
+  const saveToId = draft.task_block_id ?? fallbackTaskBlockId(blocks) ?? "";
 
   const sourceOf = (field: PlanField) => (draft.stated_by_user?.includes(field) ? "stated" : "suggested");
 
@@ -191,6 +193,19 @@ export function TaskPlanCard({ proposal, storageKey }: { proposal: TaskPlanPropo
           )}
         </PlanRow>
       </dl>
+
+      {!draft.task_id && blockOptions.length > 1 ? (
+        <label className="mt-2 block text-sm font-semibold">
+          Save to
+          <select className="mc-input mt-1 min-h-9 py-1 font-normal" disabled={!pending} value={saveToId} onChange={(event) => setDraft({ ...draft, task_block_id: event.target.value })}>
+            {blockOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       {task.due_date || task.priority ? (
         <div className="mt-2 flex flex-wrap gap-1.5 text-sm">

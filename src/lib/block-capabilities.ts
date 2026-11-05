@@ -15,9 +15,9 @@ export interface BlockCapability {
 export const BLOCK_CAPABILITIES: Record<BlockType, BlockCapability> = {
   task_list: {
     type: "task_list",
-    purpose: "Keep all tasks together and decide what comes next.",
+    purpose: "Keep the tasks of one topic together and decide what comes next.",
     supportedData: ["tasks", "status", "priority", "deadline", "estimated minutes"],
-    actions: ["add, edit, and delete tasks", "show a list or a board", "filter by date or completion", "sort by deadline, priority, or title", "change status"],
+    actions: ["hold its own tasks under its own title", "move tasks to another task block", "add, edit, and delete tasks", "show a list or a board", "filter by date or completion", "sort by deadline, priority, or title", "change status"],
     appropriateWhen: ["the person needs an overview", "the work needs to be compared or ordered with other tasks", "no other block fits better"],
     limits: ["shows no step-by-step guidance for one task"],
   },

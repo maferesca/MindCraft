@@ -12,6 +12,8 @@ export interface AssistantRequest {
   message?: string;
   autoSend?: boolean;
   helpRequest?: HelpRequest;
+  // Only an explicit request adds a group's content to the conversation.
+  groupId?: string;
 }
 
 interface WorkspaceUI {
@@ -38,8 +40,8 @@ interface WorkspaceUI {
   openPlanning: (prefill?: string) => void;
   closePlanning: () => void;
 
-  taskEditor: { taskId: string | null; title?: string } | null;
-  openTaskEditor: (taskId: string | null, title?: string) => void;
+  taskEditor: { taskId: string | null; title?: string; blockId?: string } | null;
+  openTaskEditor: (taskId: string | null, title?: string, blockId?: string) => void;
   closeTaskEditor: () => void;
 
   missingInfo: { taskId: string; entryId: string | null } | null;
@@ -68,7 +70,7 @@ export function WorkspaceUIProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<SettingsSection | null>(null);
   const [planningOpen, setPlanningOpen] = useState(false);
   const [planningPrefill, setPlanningPrefill] = useState("");
-  const [taskEditor, setTaskEditor] = useState<{ taskId: string | null; title?: string } | null>(null);
+  const [taskEditor, setTaskEditor] = useState<{ taskId: string | null; title?: string; blockId?: string } | null>(null);
   const [missingInfo, setMissingInfo] = useState<{ taskId: string; entryId: string | null } | null>(null);
   const [guideStep, setGuideStep] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -132,7 +134,7 @@ export function WorkspaceUIProvider({ children }: { children: ReactNode }) {
     closePlanning: () => setPlanningOpen(false),
 
     taskEditor,
-    openTaskEditor: (taskId, title) => setTaskEditor({ taskId, title }),
+    openTaskEditor: (taskId, title, blockId) => setTaskEditor({ taskId, title, blockId }),
     closeTaskEditor: () => setTaskEditor(null),
 
     missingInfo,

@@ -56,7 +56,7 @@ Email confirmation follows your Supabase Auth settings. If confirmation is on, s
 
    See `.env.example` for the optional variables. Changing a `NEXT_PUBLIC_` value requires a new deployment, because it is built into the browser code. Never add the Supabase service role key.
 2. In Supabase **Authentication > URL Configuration**, set **Site URL** to the production URL and add `https://your-domain/auth/callback` to **Redirect URLs**. If the callback is not allowed, Supabase falls back to the Site URL, so a Site URL left on localhost sends email links to localhost.
-3. Apply any new files in `supabase/migrations/`, ideally before deploying. Without `20261105000000_task_estimates.sql`, confirmed plans still save but lose their estimated minutes, and the task form cannot save an estimate.
+3. Apply any new files in `supabase/migrations/`, ideally before deploying. Without `20261105000000_task_estimates.sql`, confirmed plans still save but lose their estimated minutes, and the task form cannot save an estimate. `20261106000000_task_blocks_and_groups.sql` must run before deploying the code that uses it: tasks and layouts cannot save without its columns. It changes no existing rows.
 4. Run `npm run verify` and `npm run build`, then deploy. A push to the production branch deploys it. Other branches get a preview deployment.
 5. After deploying, request a password reset and confirm that the email link opens the production site.
 
@@ -98,7 +98,7 @@ src/proxy.ts: refreshes the session cookie and redirects signed-out visitors
 - **Blocks are views and records are shared.** `workspace_blocks` stores only presentation: block type, display options, grid positions per breakpoint, phone order, and hidden state. Tasks, steps, notes, and events live in their own tables. Every block reads from the same in-memory store, so a change in one block shows up everywhere straight away. Removing a block never deletes content.
 - **Creative Mode edits a draft.** Entering Creative Mode snapshots the block list. Undo and Redo work on a history of drafts. **Save** writes only the difference. **Cancel** discards the draft. Task edits made during the session are not part of the draft, so they survive Cancel.
 - **Layouts per breakpoint.** Desktop uses a 12-column grid, tablet uses 6 columns, and phones use a single column. If a breakpoint has no saved layout, MindCraft builds one from the desktop reading order (top to bottom, then left to right). Reordering on a phone saves `mobile_order` and never changes desktop positions.
-- **AI proposals are never actions.** The model returns `{ reply, question?, proposals[] }`. The server checks each proposal against a strict Zod union of the eight allowed types and drops unknown task ids. It also removes deadlines and priorities unless the user's own words mention them. The browser validates the result again, and validates once more before Apply. MindCraft never runs model-generated code, queries, or arbitrary mutations.
+- **AI proposals are never actions.** The model returns `{ reply, question?, proposals[] }`. The server checks each proposal against a strict Zod union of the nine allowed types and drops unknown task ids. It also removes deadlines and priorities unless the user's own words mention them. The browser validates the result again, and validates once more before Apply. MindCraft never runs model-generated code, queries, or arbitrary mutations.
 - **One assistant.** The chat panel, Plan my day, Help me start, and Missing information all use the same endpoint, rules, and saved conversation. Each request sends only the context it needs (see "What is sent to the AI").
 - **Task plans reuse existing records.** A confirmed `task_plan` stores the deliverable in `expected_result`, the completion criterion in the Before submitting checklist, and the first action as the first step. None of these completes the task. The estimate is the optional `estimated_minutes` column.
 - **Confirming twice saves once.** Each record of a plan has an id derived from the message and proposal. A double click, a retry, or another device reaches the same id, and the primary key rejects the second copy.
@@ -148,6 +148,29 @@ Saved preferences reach the assistant as direct instructions for each reply: res
 
 If a request fails, the text stays in the box and the panel offers **Retry** with a manual path, and the browser stops waiting after 45 seconds. When the provider is unavailable, the notice says the person's work is safe only if storage has confirmed every change (`src/lib/data/write-tracker.ts`). Retrying can't repeat a task: proposals save with deterministic ids, and a task with the same title on the open list is not added twice. Proposals are validated on the server, in the browser, and again at Confirm. Task content is sent as data and cannot override the rules.
 
+### Task blocks
+
+Each task block holds its own tasks under its own title and optional description, set with the pencil in its header. `tasks.block_id` links a task to its block. A task with no block, or whose block was removed, appears in the oldest visible task block, so a new block starts empty, existing tasks stay visible, and no data migration was needed. Moving a task only changes this link, so its details, steps, and calendar entries stay the same. There is one task record, and the calendar reads the same record.
+
+### Work groups
+
+A group is the set of blocks that share a `group_id`, and `group_title` holds its name. Both are columns on `workspace_blocks`, so groups live in the Creative Mode draft and work with Undo, Redo, Cancel, and Save. The edits are pure functions in `src/lib/groups.ts`.
+
+- **Snap:** drag a block by its grip until the pointer is over another block's header row or a group's title bar, and a dashed target appears. Dropping there groups them. Dropping anywhere else only moves the block.
+- **Stillness:** other blocks stay still during a drag, so a target never moves away from the pointer. They make room when the block is dropped.
+- **Title bar:** a one-row grid item computed from the group's blocks, which is why it can be dragged. Moving it shifts every block by the same amount.
+- **Menus:** the block's three-dot menu offers Add to group and Remove from group, and the group's menu offers Remove group, keep blocks. These work on phones, where nothing is dragged.
+
+The shared background is drawn per block, so it never covers a block outside the group. Grouping never changes a block's content or its tasks.
+
+### Timers
+
+Each timer block has its own name, length, and linked task or activity in `config`, and its own session in `preferences.timerSessions`. Sessions are stored as timestamps, so a refresh, a change of view, or a background tab never resets or slows them. Only one timer runs at a time: starting another pauses the first and says so. **Start new session** always uses the configured length, and asks first if it would replace an unfinished session. Focus Mode shows the timer in use without touching its session. Finishing a session never completes a task.
+
+### Encouragement
+
+The welcome card shows one phrase per day from a local list in `src/lib/encouragement.ts`. A short message follows a completed task or focus session, and only after the save succeeds. **Show motivational messages** in **Settings > Workspace** turns these off. Save, error, and timer status messages always stay.
+
 ### Personal adaptation
 
 Each person chooses how MindCraft helps them. These are personal preferences, saved with the account and kept apart from task records, so changing one never changes a task or its progress.
@@ -173,7 +196,8 @@ Requests go from the server to Gemini or Groq. `AI_PRIMARY_PROVIDER` sets which 
 - the user's message and the last few chat messages
 - the display name, so the assistant can address the person by it
 - the selected task (title, description, expected result, deadline, priority, status, steps, open missing information)
-- titles, status, and deadlines of other open tasks
+- titles, status, and deadlines of other open tasks, and the names of task blocks
+- only when the assistant is opened for a work group: its title, block names, tasks, and notes linked to those tasks. The panel shows this, and **Clear** stops it
 - the block types in the workspace, including hidden ones
 - preferences: response detail, language, assistance level, communication style, task presentation, focus time, focus length, and what helps the person get started
 - choices the user has stated, such as "no timer"
@@ -191,13 +215,14 @@ Notes, calendar events, email, and other settings are never sent. A voice record
 - New accounts start with an empty workspace showing "Your space, your way." and the actions Build my space, Help me choose, and Plan my day. A starter layout appears only as a preview and is added only after confirmation.
 - Compact header with profile menu (Profile, Appearance and reading, Workspace preferences, Notifications, AI and privacy, Account, Sign out), workspace name, an optional streak, and three modes. There is no sidebar.
 - **Creative Mode:** compact toolbar with numbered slots, plus an inventory panel organized into Planning, Focus, and Support. Drag from either one or click to add. Arrow keys, Enter, and number keys work in the toolbar. Also includes header-only drag handles, resizing with minimum sizes, snap grid, Save, Cancel, Undo, Redo (also Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y), hide or remove with an explanation, and non-drag controls (Move earlier or later, size presets, move left, right, up, or down).
+- **Work groups:** connect blocks into a named group by dragging or from a menu, move the group as one, and detach blocks without losing anything.
 - **Finding your way:** every block header has an information button with a short description and an example, and the inventory shows the same text. An optional guide explains how to open the inventory, add, move, and resize blocks, and save. It can be skipped, and reopened from **Settings > Workspace** or Creative Mode.
 - **Minimize and maximize:** every block header can minimize the block to a small icon in a tray above the workspace, which is saved per block, or show it at full size for the moment. A minimized block takes no space in the grid and keeps its saved size and position, so restoring brings them back. Full size is never saved and is not available in Creative Mode.
 - **Blocks:**
   - **Tasks:** list or board, status dropdown and drag between columns, All, Today, Upcoming, Overdue, and Completed filters, and sorting by deadline, priority, or title. The board's All filter also shows done tasks, so its Done column works.
   - **Calendar:** month, week, and day views plus an agenda, using the profile timezone. Date-only deadlines appear all day and timed deadlines at their time. Events and work sessions are edited separately from deadlines, which change only through **Edit deadline** in task details.
   - **Task guide:** task details, ordered steps at three assistance levels in List or Visual view, Read aloud, a separate "Before submitting" checklist, missing information, linked resources, and **Mark task done**. Neither checklist completes a task.
-  - **Focus timer:** countdown or stopwatch based on timestamps, so a session survives a refresh. Optional break and sound. One shared session is used by every timer block and Focus Mode.
+  - **Focus timer:** several named timers with their own length and linked task or activity, based on timestamps, so a session survives a refresh. One runs at a time. Optional break and sound.
   - **Notes:** plain text, bullets, and checklists, pinning, autosave status, and links to one task or project.
   - **Resources:** saved links with list or card views, favorites, and filters.
   - **Check-in:** progress updates and help requests saved as private drafts. Help requests have Open, Waiting, and Resolved statuses and follow-ups.

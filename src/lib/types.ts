@@ -27,6 +27,8 @@ export interface Task {
   source_link: string | null;
   // Absent on a database that has not run the task estimates migration yet.
   estimated_minutes?: number | null;
+  // The task block that holds it. Without one, it appears in the oldest task block.
+  block_id?: string | null;
   status: TaskStatus;
   created_at: string;
   updated_at: string;
@@ -137,6 +139,9 @@ export interface WorkspaceBlock {
   layouts: Partial<Record<Breakpoint, GridPosition>>;
   mobile_order: number;
   hidden: boolean;
+  // Blocks with the same group_id form one work group.
+  group_id?: string | null;
+  group_title?: string | null;
   created_at: string;
   updated_at: string;
 }

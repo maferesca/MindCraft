@@ -182,5 +182,22 @@ check("Confirming a proposal twice cannot create a second task", await fails(ali
 check("An estimate outside 1 to 600 minutes is rejected", await fails(alice, `insert into tasks (user_id, title, estimated_minutes) values ('${alice}', 'Too long', 601)`));
 check("Bob cannot see Alice's plan task", (await as(bob, `select id from tasks where id = '${planId}'`)).rows.length === 0);
 
+// Task blocks and work groups.
+const aliceList = (await as(alice, "insert into workspace_blocks (user_id, workspace_id, block_type, title, group_id, group_title) values ($1, $2, 'task_list', 'Launch', gen_random_uuid(), 'Launch group') returning id", [alice, workspaceId])).rows[0].id;
+const notesBlock = (await as(alice, "insert into workspace_blocks (user_id, workspace_id, block_type) values ($1, $2, 'notes') returning id", [alice, workspaceId])).rows[0].id;
+const blockTask = (await as(alice, "insert into tasks (user_id, title, block_id) values ($1, 'In a block', $2) returning id", [alice, aliceList])).rows[0].id;
+const bobTask = (await as(bob, "insert into tasks (user_id, title) values ($1, 'Bob task') returning id", [bob])).rows[0].id;
+check("A task keeps its task block", (await as(alice, "select block_id from tasks where id = $1", [blockTask])).rows[0]?.block_id === aliceList);
+check("Bob cannot put a task in Alice's task block", await fails(bob, "update tasks set block_id = $1 where id = $2", [aliceList, bobTask]));
+check("Bob cannot create a task in Alice's task block", await fails(bob, "insert into tasks (user_id, title, block_id) values ($1, 'x', $2)", [bob, aliceList]));
+check("A task can only belong to a task block", await fails(alice, "update tasks set block_id = $1 where id = $2", [notesBlock, blockTask]));
+check("Bob cannot read Alice's groups", (await as(bob, "select * from workspace_blocks where group_id is not null")).rows.length === 0);
+check("A group title has a length limit", await fails(alice, "update workspace_blocks set group_title = repeat('x', 61) where id = $1", [aliceList]));
+await as(alice, "update workspace_blocks set group_id = null, group_title = null where id = $1", [aliceList]);
+check("Removing a group keeps its block", (await as(alice, "select id from workspace_blocks where id = $1", [aliceList])).rows.length === 1);
+await as(alice, "delete from workspace_blocks where id = $1", [aliceList]);
+const afterBlock = await as(alice, "select block_id, title from tasks where id = $1", [blockTask]);
+check("Removing a task block keeps its tasks", afterBlock.rows[0]?.title === "In a block" && afterBlock.rows[0]?.block_id === null);
+
 console.log(failures === 0 ? "\nAll RLS checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

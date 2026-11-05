@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import { BLOCK_DEFINITIONS } from "@/lib/blocks";
 import { PREFERENCE_LABELS, preferenceValueLabel } from "@/lib/preferences";
 import type { Proposal } from "@/lib/schemas";
-import { PRIORITY_LABELS, formatDueDate } from "@/lib/task-helpers";
+import { PRIORITY_LABELS, formatDueDate, taskBlockOptions } from "@/lib/task-helpers";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useNotify } from "../ui/notifications";
 import { ReadAloud } from "../ui/read-aloud";
@@ -98,7 +98,10 @@ function SimpleProposalCard({ proposal, storageKey }: { proposal: SimpleProposal
 }
 
 function ProposalBody({ proposal, editing, onChange }: { proposal: SimpleProposal; editing: boolean; onChange: (next: SimpleProposal) => void }) {
+  const { blocks } = useWorkspaceData();
   switch (proposal.type) {
+    case "move_task":
+      return <p>Moves this task to <span className="font-semibold">{taskBlockOptions(blocks).find((option) => option.id === proposal.task_block_id)?.label ?? "another block"}</span>. Its details and steps stay the same.</p>;
     case "create_tasks":
       return (
         <div className="flex flex-col gap-2">

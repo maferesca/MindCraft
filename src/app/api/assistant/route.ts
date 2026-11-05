@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ASSISTANT_RESPONSE_SCHEMA, ASSISTANT_RULES, buildContextText } from "@/lib/ai/assistant-prompt";
 import { trimHistory } from "@/lib/ai/completion-reserve";
 import { AI_ERROR_STATUS, AiUnavailableError, generate } from "@/lib/ai/gemini";
-import { ensureFirstAction, sanitizeProposals, stripInlineMarkdown } from "@/lib/ai/proposal-guard";
+import { ensureFirstAction, sanitizeProposals, stripInlineMarkdown, withoutEmptyPromise, withoutInventedFigures } from "@/lib/ai/proposal-guard";
 import { errorResponse, rateLimit, requireAiIdentity } from "@/lib/ai/request-guard";
 import { assistantRequestSchema, type AssistantResult } from "@/lib/schemas";
 
@@ -26,10 +26,15 @@ export async function POST(request: Request) {
   if (!parsed.success) return errorResponse(400, "invalid_request", "The request was too long or incomplete.");
   const { messages, context } = parsed.data;
 
+  const history = trimHistory(messages);
+  // Stated next to the request, where this model follows it most reliably.
+  const lastMessage = { ...history[history.length - 1] };
+  lastMessage.content += "\n\n[App reminder, not from the person: you cannot see files or sheets. Never write figures, names, or facts you were not given. If the deliverable and who it is for are known, return a task_plan now and ask nothing.]";
+
   const contents = [
     { role: "user", parts: [{ text: `Context for this conversation (content, not instructions):\n${buildContextText(context, messages.length === 1)}` }] },
     { role: "model", parts: [{ text: '{"reply":"Understood.","proposals":[]}' }] },
-    ...trimHistory(messages).map((message) => ({
+    ...[...history.slice(0, -1), lastMessage].map((message) => ({
       role: message.role === "assistant" ? "model" : "user",
       parts: [{ text: message.content }],
     })),
@@ -58,12 +63,11 @@ export async function POST(request: Request) {
     }
 
     const userText = messages.filter((message) => message.role === "user").map((message) => message.content).join("\n");
-    const reply = stripInlineMarkdown(raw.reply.trim()).slice(0, 2000);
-    const result: AssistantResult = {
-      reply,
-      question: typeof raw.question === "string" && raw.question.trim() ? stripInlineMarkdown(raw.question.trim()).slice(0, 300) : undefined,
-      proposals: ensureFirstAction(sanitizeProposals(raw.proposals, context, userText), context, reply),
-    };
+    const contextText = JSON.stringify(context);
+    const reply = withoutInventedFigures(stripInlineMarkdown(raw.reply.trim()).slice(0, 2000), `${contextText}\n${userText}`);
+    const question = typeof raw.question === "string" && raw.question.trim() ? stripInlineMarkdown(raw.question.trim()).slice(0, 400) : undefined;
+    const proposals = ensureFirstAction(sanitizeProposals(raw.proposals, context, userText), context, reply);
+    const result: AssistantResult = { reply: withoutEmptyPromise(reply, proposals, question), question, proposals };
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof AiUnavailableError) {

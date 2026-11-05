@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
+import { dailyPhrase } from "@/lib/encouragement";
 import { VoiceRecorder } from "../assistant/voice-recorder";
 import { useToday } from "../blocks/use-today";
 import { useWorkspaceData } from "../providers/workspace-data";
@@ -72,6 +73,7 @@ export function DailyWelcomeCard() {
         </h2>
         <IconButton size="sm" label="Dismiss for today" icon={<X size={18} />} onClick={dismiss} />
       </div>
+      {preferences.motivationalMessages ? <p className="mc-hint">{dailyPhrase(today)}</p> : null}
       <form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-2 sm:flex-row">
         <label htmlFor="welcome-text" className="sr-only">
           Type a message

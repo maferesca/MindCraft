@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, us
 import { cacheAppearance } from "@/lib/appearance-cache";
 import { blockPlacement } from "@/lib/block-capabilities";
 import { BLOCK_DEFINITIONS, GRID_COLUMNS, findFreePosition, sizeFor } from "@/lib/blocks";
+import { TASK_COMPLETED_MESSAGE } from "@/lib/encouragement";
 import { clearSessionData } from "@/lib/clear-session-data";
 import { createLocalRepository } from "@/lib/data/local-repository";
 import { RepositoryError, type Repository, type Row, type TableName } from "@/lib/data/repository";
@@ -13,7 +14,7 @@ import { browserTimezone } from "@/lib/dates";
 import { DEFAULT_PREFERENCES, applyPreferencesToDocument, normalizePreferences, type Preferences } from "@/lib/preferences";
 import { proposalSchema, type Proposal, type TaskInput } from "@/lib/schemas";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { NO_SUPPORT_YET } from "@/lib/task-helpers";
+import { NO_SUPPORT_YET, taskBlocks } from "@/lib/task-helpers";
 import { normalizeTitle, proposalRecordId } from "@/lib/task-plan";
 import type {
   BlockType,
@@ -78,13 +79,14 @@ interface WorkspaceData {
   streak: Streak | null;
   previousVisitDate: string | null;
 
-  updatePreferences: (patch: Partial<Preferences>) => Promise<void>;
+  // Resolves to false when the change could not be saved.
+  updatePreferences: (patch: Partial<Preferences>) => Promise<boolean>;
   updateProfile: (patch: Partial<Profile>) => Promise<void>;
   updateNotificationPreferences: (patch: Partial<NotificationPreferences>) => Promise<void>;
   renameWorkspace: (name: string) => Promise<void>;
 
   createTask: (input: TaskInput, stepTexts?: string[]) => Promise<Task | null>;
-  updateTask: (id: string, patch: Partial<Task>) => Promise<void>;
+  updateTask: (id: string, patch: Partial<Task>) => Promise<boolean>;
   deleteTask: (id: string) => Promise<DeletedTaskSnapshot | null>;
   restoreTask: (snapshot: DeletedTaskSnapshot) => Promise<void>;
   addStep: (taskId: string, text: string, position?: number) => Promise<TaskStep | null>;
@@ -108,6 +110,7 @@ interface WorkspaceData {
   saveLayout: (draft: WorkspaceBlock[]) => Promise<boolean>;
   addBlocks: (types: Array<{ type: BlockType; size?: { w: number; h: number }; config?: Record<string, unknown> }>) => Promise<void>;
   updateBlockConfig: (id: string, config: Record<string, unknown>) => Promise<void>;
+  updateBlockTitle: (id: string, title: string | null) => Promise<void>;
   resetLayout: () => Promise<void>;
 
   appendMessage: (role: ChatMessage["role"], content: string, proposal?: unknown) => Promise<ChatMessage | null>;
@@ -205,6 +208,7 @@ function useCollectionActions<T extends { id: string }>(
 export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const { notify } = useNotify();
   const repoRef = useRef<Repository | null>(null);
+  const preferencesRef = useRef<Preferences>(DEFAULT_PREFERENCES);
   const [writes] = useState(createWriteTracker);
   const workSaved = useSyncExternalStore(writes.subscribe, writes.isConfirmed, () => false);
   const [status, setStatus] = useState<Status>("loading");
@@ -287,6 +291,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         setProfile(currentProfile);
+        preferencesRef.current = loadedPreferences;
         setPreferences(loadedPreferences);
         applyPreferencesToDocument(loadedPreferences);
         cacheAppearance(loadedPreferences);
@@ -326,17 +331,22 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
   const updatePreferences = useCallback(
     async (patch: Partial<Preferences>) => {
-      const next = normalizePreferences({ ...preferences, ...patch });
+      // Two changes in the same moment must build on each other, so the latest
+      // value comes from the ref rather than from the last render.
+      const next = normalizePreferences({ ...preferencesRef.current, ...patch });
+      preferencesRef.current = next;
       setPreferences(next);
       applyPreferencesToDocument(next);
       cacheAppearance(next);
       try {
         await requireRepo(repoRef).update("preferences", requireRepo(repoRef).userId, { settings: next });
+        return true;
       } catch (error) {
         reportError(error);
+        return false;
       }
     },
-    [preferences, reportError],
+    [reportError],
   );
 
   const updateProfile = useCallback(
@@ -422,12 +432,16 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       try {
         const updated = await requireRepo(repoRef).update<Task>("tasks", id, patch as Row);
         setTasks((current) => current.map((task) => (task.id === id ? updated : task)));
+        // Only after the save succeeded, so this message is always true.
+        if (patch.status === "done" && before?.status !== "done" && preferencesRef.current.motivationalMessages) notify(TASK_COMPLETED_MESSAGE);
+        return true;
       } catch (error) {
         if (before) setTasks((current) => current.map((task) => (task.id === id ? before : task)));
         reportError(error);
+        return false;
       }
     },
-    [tasks, reportError],
+    [tasks, notify, reportError],
   );
 
   const deleteTask = useCallback(
@@ -651,12 +665,14 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           const saved = savedById.get(block.id);
           const fields = {
             block_type: block.block_type,
-            title: block.title,
-            // Settings save on their own, so a layout save never overwrites them.
+            // Titles and settings save on their own, so a layout save never overwrites them.
+            title: saved ? saved.title : ((draftConfigs[block.id]?.title as string | null | undefined) ?? block.title),
             config: saved?.config ?? { ...block.config, ...draftConfigs[block.id] },
             layouts: block.layouts,
             mobile_order: block.mobile_order,
             hidden: block.hidden,
+            group_id: block.group_id ?? null,
+            group_title: block.group_title ?? null,
           };
           if (!saved) {
             result.push(await requireRepo(repoRef).insert<WorkspaceBlock>("workspace_blocks", { ...fields, workspace_id: workspace.id }));
@@ -725,6 +741,22 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       }
     },
     [blocks, reportError],
+  );
+
+  const updateBlockTitle = useCallback(
+    async (id: string, title: string | null) => {
+      if (id.startsWith("new-")) {
+        setDraftConfigs((current) => ({ ...current, [id]: { ...current[id], title } }));
+        return;
+      }
+      setBlocks((current) => current.map((item) => (item.id === id ? { ...item, title } : item)));
+      try {
+        await requireRepo(repoRef).update("workspace_blocks", id, { title });
+      } catch (error) {
+        reportError(error);
+      }
+    },
+    [reportError],
   );
 
   const resetLayout = useCallback(async () => {
@@ -820,6 +852,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           expected_result: draft.deliverable || null,
           due_date: draft.due_date ?? null,
           priority: draft.priority ?? null,
+          block_id: plan.task_block_id ?? null,
         };
         let created: Task | null;
         try {
@@ -932,6 +965,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           }
           return fresh.length === 1 ? "Added 1 step." : `Added ${fresh.length} steps.`;
         }
+        case "move_task": {
+          const destination = taskBlocks(blocks).find((block) => block.id === proposal.task_block_id);
+          if (!destination || !tasks.some((task) => task.id === proposal.task_id)) throw new Error("That task or block no longer exists.");
+          if (!(await updateTask(proposal.task_id, { block_id: destination.id }))) throw new Error("The task could not be moved. Try again.");
+          return `Moved to ${destination.title || "Tasks"}.`;
+        }
         case "record_missing_info": {
           if (!tasks.some((task) => task.id === proposal.task_id)) throw new Error("That task no longer exists.");
           const repeated = checkIns.some(
@@ -973,7 +1012,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           return "Draft ready to copy.";
       }
     },
-    [tasks, steps, checkIns, applyTaskPlan, applyCreateTasks, addStep, addBlocks, updatePreferences],
+    [tasks, steps, checkIns, blocks, applyTaskPlan, applyCreateTasks, addStep, addBlocks, updatePreferences, updateTask],
   );
 
   const signOut = useCallback(async () => {
@@ -1032,6 +1071,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     saveLayout,
     addBlocks,
     updateBlockConfig,
+    updateBlockTitle,
     resetLayout,
     appendMessage,
     clearChat,

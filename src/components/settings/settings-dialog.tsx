@@ -183,6 +183,10 @@ function WorkspaceSection() {
           Show the daily welcome card
         </label>
         <label className="flex items-center gap-2">
+          <input type="checkbox" className="h-5 w-5" checked={preferences.motivationalMessages} onChange={(event) => updatePreferences({ motivationalMessages: event.target.checked })} />
+          Show motivational messages
+        </label>
+        <label className="flex items-center gap-2">
           <input type="checkbox" className="h-5 w-5" checked={preferences.showStreak} onChange={(event) => updatePreferences({ showStreak: event.target.checked })} />
           Show the visit streak in the header
         </label>
@@ -331,7 +335,8 @@ function AiSection() {
           <li>your message and the last few messages of this chat</li>
           <li>your display name, so the assistant can call you by it</li>
           <li>the selected task (title, description, expected result, deadline, priority, status, steps, and open missing information)</li>
-          <li>the titles, status, and deadlines of your other open tasks</li>
+          <li>the titles, status, and deadlines of your other open tasks, and the names of your task blocks</li>
+          <li>only if you open the assistant for a work group: its title, block names, tasks, and the notes linked to those tasks</li>
           <li>which block types are in your workspace, including hidden ones</li>
           <li>your response detail, language, assistance level, communication style, task presentation, session length, and how you said you like to work</li>
         </ul>

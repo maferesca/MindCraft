@@ -72,7 +72,12 @@ export const preferencesSchema = z.object({
   startHelp: z.array(z.enum(START_HELP_OPTIONS)).max(5),
   workMinutes: z.number().int().min(1).max(600),
   breakMinutes: z.number().int().min(1).max(120),
+  // The session used when no timer block is involved, as in Focus Mode.
   timer: timerSessionSchema,
+  // Sessions of timer blocks, by block id. Only one runs at a time.
+  timerSessions: z.record(z.string(), timerSessionSchema),
+  activeTimerId: z.string().nullable(),
+  motivationalMessages: z.boolean(),
   showStreak: z.boolean(),
   dailyWelcome: z.boolean(),
 });
@@ -103,6 +108,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   workMinutes: 25,
   breakMinutes: 5,
   timer: { mode: "countdown", phase: "work", runState: "idle", startedAt: null, accumulatedMs: 0, targetMs: 0, endedBy: null, taskId: null },
+  timerSessions: {},
+  activeTimerId: null,
+  motivationalMessages: true,
   showStreak: true,
   dailyWelcome: true,
 };

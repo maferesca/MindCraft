@@ -1,7 +1,7 @@
 "use client";
 
 import { DropdownMenu } from "radix-ui";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronUp, EyeOff, GripVertical, Maximize2, Minimize2, Minus, MoreHorizontal, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronUp, EyeOff, GripVertical, Link2, Maximize2, Minimize2, Minus, MoreHorizontal, Trash2, Unlink } from "lucide-react";
 import type { ReactNode } from "react";
 import { BLOCK_DEFINITIONS } from "@/lib/blocks";
 import { SIZE_LABELS, currentSizePreset, type SizePreset } from "@/lib/layout-edit";
@@ -9,6 +9,7 @@ import type { Breakpoint, WorkspaceBlock } from "@/lib/types";
 import { BlockIcon, blockHeaderBackground } from "../blocks/block-icon";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { IconButton } from "../ui/icon-button";
+import { BlockDetails } from "./block-details";
 import { BlockInfo } from "./block-info";
 
 export interface CreativeActions {
@@ -20,6 +21,11 @@ export interface CreativeActions {
   remove: () => void;
   isFirst: boolean;
   isLast: boolean;
+  grouped: boolean;
+  // Groups to join, and single blocks to start a group with.
+  groupTargets: Array<{ blockId: string; label: string }>;
+  joinGroup: (targetBlockId: string) => void;
+  leaveGroup: () => void;
 }
 
 interface BlockFrameProps {
@@ -64,8 +70,10 @@ export function BlockFrame({ block, breakpoint, creative, maximized = false, onT
         </h3>
         {creative ? <CreativeControls block={block} breakpoint={breakpoint} actions={creative} title={title} /> : null}
         <div className="flex items-center gap-0.5">
-          <BlockInfo type={block.block_type} />
-          {!maximized ? (
+          {block.block_type === "task_list" || block.block_type === "focus_timer" ? <BlockDetails block={block} /> : null}
+          {/* Creative Mode needs the room for a readable title; the inventory explains each block. */}
+          {creative ? null : <BlockInfo type={block.block_type} />}
+          {!maximized && !creative ? (
             <IconButton
               size="sm"
               label={`Minimize ${title}`}
@@ -152,6 +160,20 @@ function CreativeControls({ block, breakpoint, actions, title }: { block: Worksp
                 <DropdownMenu.Separator className="my-1 h-px bg-border" />
               </>
             ) : null}
+            {actions.grouped ? (
+              <DropdownMenu.Item className="mc-menu-item" onSelect={actions.leaveGroup}>
+                <Unlink size={16} aria-hidden="true" /> Remove from group
+              </DropdownMenu.Item>
+            ) : null}
+            {!actions.grouped && actions.groupTargets.length ? <DropdownMenu.Label className="mc-hint px-2 py-1">Add to group</DropdownMenu.Label> : null}
+            {!actions.grouped
+              ? actions.groupTargets.map((target) => (
+                  <DropdownMenu.Item key={target.blockId} className="mc-menu-item" onSelect={() => actions.joinGroup(target.blockId)}>
+                    <Link2 size={16} aria-hidden="true" /> {target.label}
+                  </DropdownMenu.Item>
+                ))
+              : null}
+            {actions.grouped || actions.groupTargets.length ? <DropdownMenu.Separator className="my-1 h-px bg-border" /> : null}
             <DropdownMenu.Item className="mc-menu-item" onSelect={actions.hide}>
               <EyeOff size={16} aria-hidden="true" /> Hide block
             </DropdownMenu.Item>

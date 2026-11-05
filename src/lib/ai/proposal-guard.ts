@@ -20,6 +20,8 @@ function repairTaskPlan(candidate: Record<string, unknown>, context: AssistantCo
   const blockType = (value: unknown) => (value as { block_type?: string } | null | undefined)?.block_type;
   const isValid = (value: unknown) => (BLOCK_TYPES as readonly unknown[]).includes(blockType(value));
   const plan = { ...candidate };
+  const blockIds = (context.taskBlocks ?? []).map((block) => block.id);
+  if (!blockIds.includes(plan.task_block_id as string)) delete plan.task_block_id;
   if (!isValid(plan.recommended_block)) delete plan.recommended_block;
   if (!isValid(plan.alternative_block) || !plan.recommended_block || blockType(plan.alternative_block) === blockType(plan.recommended_block)) {
     delete plan.alternative_block;
@@ -27,6 +29,7 @@ function repairTaskPlan(candidate: Record<string, unknown>, context: AssistantCo
   if (plan.task_id && plan.task_id !== context.task?.id) return null;
   if (plan.task && typeof plan.task === "object") {
     const task = { ...(plan.task as Record<string, unknown>) };
+    if (typeof plan.summary !== "string" || !plan.summary.trim()) plan.summary = typeof task.title === "string" ? task.title.slice(0, 400) : "Suggested plan";
     const minutes = task.estimated_minutes;
     if (typeof minutes !== "number" || !Number.isInteger(minutes) || minutes < 1 || minutes > 600) delete task.estimated_minutes;
     for (const field of ["deliverable", "done_when"]) if (!task[field]) delete task[field];
@@ -83,7 +86,8 @@ function freshSteps(steps: string[], task: AssistantContext["task"], taskId: str
 
 export function sanitizeProposals(raw: unknown, context: AssistantContext, userText: string): Proposal[] {
   if (!Array.isArray(raw)) return [];
-  const knownTaskIds = new Set([context.task?.id, ...(context.otherTasks ?? []).map((task) => task.id)].filter(Boolean));
+  const knownTaskIds = new Set([context.task?.id, ...(context.otherTasks ?? []).map((task) => task.id), ...(context.group?.tasks ?? []).map((task) => task.id)].filter(Boolean));
+  const knownBlockIds = new Set((context.taskBlocks ?? []).map((block) => block.id));
   const statedDate = DATE_HINT.test(userText);
   const statedPriority = PRIORITY_HINT.test(userText);
   const result: Proposal[] = [];
@@ -103,6 +107,7 @@ export function sanitizeProposals(raw: unknown, context: AssistantContext, userT
     if (!parsed.success) continue;
     const proposal = parsed.data;
 
+    if (proposal.type === "move_task" && (!knownTaskIds.has(proposal.task_id) || !knownBlockIds.has(proposal.task_block_id))) continue;
     if (proposal.type === "propose_steps") {
       if (!knownTaskIds.has(proposal.task_id)) continue;
       proposal.steps = freshSteps(proposal.steps, context.task, proposal.task_id).slice(0, stepLimit(context));
@@ -137,6 +142,26 @@ export function sanitizeProposals(raw: unknown, context: AssistantContext, userT
     result.push(proposal);
   }
   return result;
+}
+
+const FIGURE = /[$€£]\s?\d[\d,.]*|\d[\d,.]*\s?%|\b\d{1,3}(?:,\d{3})+\b/g;
+
+export const NO_INVENTED_FIGURES_REPLY =
+  "I can't open files or sheets, so I can't fill in real figures. Paste the numbers here and I'll help you draft it, or use the plan to start from your source.";
+
+// A model can write a convincing report from nothing. Figures the person never gave
+// must not reach them, so a reply with several of those is replaced.
+export function withoutInventedFigures(reply: string, knownText: string) {
+  const invented = (reply.match(FIGURE) ?? []).filter((figure) => !knownText.includes(figure.replace(/[$€£\s%]/g, "")));
+  return invented.length >= 2 ? NO_INVENTED_FIGURES_REPLY : reply;
+}
+
+export const NO_PLAN_REPLY = "I couldn't prepare that plan this time. Please try again, or add the task yourself.";
+
+// Some replies announce a plan and then include none, which leaves nothing to act on.
+export function withoutEmptyPromise(reply: string, proposals: Proposal[], question?: string) {
+  const announcesPlan = reply.length < 200 && /\bplan\b/i.test(reply);
+  return announcesPlan && !proposals.length && !question ? NO_PLAN_REPLY : reply;
 }
 
 // When someone asks where to begin, the answer is one action. If the model only

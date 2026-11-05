@@ -45,6 +45,7 @@ export const taskInputSchema = z.object({
   assignee: optionalText(120),
   status: z.enum(["todo", "in_progress", "done"]).optional(),
   estimated_minutes: z.number().int("Use whole minutes").min(1, "Use 1 to 600 minutes").max(600, "Use 1 to 600 minutes").nullable().optional(),
+  block_id: z.string().uuid().nullable().optional(),
 });
 export type TaskInput = z.infer<typeof taskInputSchema>;
 
@@ -117,6 +118,8 @@ export const proposalSchema = z.discriminatedUnion("type", [
     summary: z.string().max(400),
     // Set only to add this plan to the selected task instead of creating a task.
     task_id: z.string().uuid().optional(),
+    // The task block that receives a new task.
+    task_block_id: z.string().uuid().optional(),
     task: z.object({
       title: z.string().trim().min(1).max(200),
       deliverable: z.string().trim().max(1000).optional(),
@@ -148,6 +151,12 @@ export const proposalSchema = z.discriminatedUnion("type", [
     insert_first: z.boolean().optional(),
   }),
   z.object({
+    type: z.literal("move_task"),
+    summary: z.string().max(400),
+    task_id: z.string().uuid(),
+    task_block_id: z.string().uuid(),
+  }),
+  z.object({
     type: z.literal("record_missing_info"),
     summary: z.string().max(400),
     task_id: z.string().uuid(),
@@ -170,7 +179,7 @@ export const proposalSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("suggest_preferences"),
     summary: z.string().max(400),
-    changes: preferencesSchema.omit({ timer: true }).partial().refine((value) => Object.keys(value).length > 0),
+    changes: preferencesSchema.omit({ timer: true, timerSessions: true, activeTimerId: true }).partial().refine((value) => Object.keys(value).length > 0),
   }),
   z.object({
     type: z.literal("draft_clarification"),
@@ -184,7 +193,7 @@ export const PROPOSAL_TYPES = proposalSchema.options.map((option) => option.shap
 
 export const assistantResultSchema = z.object({
   reply: z.string().trim().min(1).max(2000),
-  question: z.string().trim().max(300).optional(),
+  question: z.string().trim().max(400).optional(),
   proposals: z.array(proposalSchema).max(3),
 });
 export type AssistantResult = z.infer<typeof assistantResultSchema>;
@@ -215,6 +224,27 @@ export const assistantContextSchema = z.object({
       steps: z.array(z.object({ text: z.string().max(500), done: z.boolean() })).max(30),
     })
     .nullable()
+    .optional(),
+  // Task blocks by name, so a task can be placed in the right one.
+  taskBlocks: z.array(z.object({ id: z.string().uuid(), title: z.string().max(60) })).max(20).optional(),
+  // Sent only when the person opened the assistant for this group.
+  group: z
+    .object({
+      title: z.string().max(60),
+      blocks: z.array(z.string().max(60)).max(20),
+      tasks: z
+        .array(
+          z.object({
+            id: z.string().uuid(),
+            title: z.string().max(200),
+            status: z.string().max(20),
+            expected_result: z.string().max(1000).nullable().optional(),
+            due_date: z.string().max(20).nullable().optional(),
+          }),
+        )
+        .max(30),
+      notes: z.array(z.object({ title: z.string().max(200).nullable().optional(), body: z.string().max(500) })).max(10),
+    })
     .optional(),
   // Titles only, so the assistant can compare tasks without seeing everything.
   otherTasks: z.array(z.object({ id: z.string().uuid(), title: z.string().max(200), status: z.string().max(20), due_date: z.string().max(20).nullable() })).max(30).optional(),

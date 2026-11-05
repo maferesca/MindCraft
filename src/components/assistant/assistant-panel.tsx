@@ -5,6 +5,7 @@ import { Loader2, MessageCircle, MoreHorizontal, Plus, RotateCcw, Send, X } from
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { askAssistant } from "@/lib/ai/client";
 import { proposalSchema, type HelpRequest, type Proposal } from "@/lib/schemas";
+import { workGroups } from "@/lib/groups";
 import { findNamedTask } from "@/lib/task-plan";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI, type AssistantMode } from "../providers/workspace-ui";
@@ -64,12 +65,13 @@ export function AssistantButton() {
 // One contextual assistant shared by chat, Daily Planning, Help me start,
 // and Missing information, with a single saved conversation.
 export function AssistantPanel() {
-  const { messages, profile, tasks, appendMessage, clearChat } = useWorkspaceData();
+  const { messages, profile, tasks, blocks, appendMessage, clearChat } = useWorkspaceData();
   const { assistantOpen, assistantRequest, consumeAssistantRequest, closeAssistant, openMissingInfo, openSettings, openTaskEditor } = useWorkspaceUI();
   const buildContext = useAssistantContext();
   const [input, setInput] = useLocalDraft("assistant");
   const [mode, setMode] = useState<AssistantMode>("chat");
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [groupId, setGroupId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const sendingRef = useRef(false);
   // Retain a received answer if saving fails, so retry saves it without making
@@ -87,6 +89,7 @@ export function AssistantPanel() {
   const listRef = useRef<HTMLDivElement>(null);
   const task = taskId ? tasks.find((item) => item.id === taskId) : null;
   const name = profile?.display_name?.trim();
+  const group = groupId ? (workGroups(blocks).find((item) => item.id === groupId) ?? null) : null;
 
   async function send(text: string, sendMode: AssistantMode = mode, sendTaskId: string | null = taskId, requested?: HelpRequest) {
     const content = text.trim();
@@ -102,7 +105,7 @@ export function AssistantPanel() {
       if (!exchange || exchange.text !== content || exchange.mode !== sendMode || exchange.taskId !== sendTaskId) {
         const history = messages.slice(-10).map((message) => ({ role: message.role, content: message.content }));
         const contextTaskId = sendTaskId ?? findNamedTask(content, tasks)?.id ?? null;
-        const result = await askAssistant([...history, { role: "user", content }], buildContext(sendMode, contextTaskId, [content], helpRequest));
+        const result = await askAssistant([...history, { role: "user", content }], buildContext(sendMode, contextTaskId, [content], helpRequest, group?.id));
         if (!result.ok) {
           setError({ code: result.code, message: result.message, text: content, helpRequest });
           setInput((current) => current || content);
@@ -150,6 +153,7 @@ export function AssistantPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMode(request.mode);
     setTaskId(request.taskId ?? null);
+    setGroupId(request.groupId ?? null);
     const requestTask = request.taskId ? tasks.find((item) => item.id === request.taskId) : null;
     const message =
       request.message ?? (request.mode === "help_me_start" && requestTask ? `Help me start "${requestTask.title}".` : "");
@@ -230,6 +234,18 @@ export function AssistantPanel() {
               setMode("chat");
             }}
           >
+            Clear
+          </button>
+        </div>
+      ) : null}
+
+      {group ? (
+        <div className="flex items-center gap-2 border-b border-border bg-surface-muted px-4 py-2 text-sm">
+          <span className="min-w-0 flex-1">
+            Using group: <span className="font-semibold">{group.title}</span>
+            <span className="mc-hint block">Its tasks and the notes linked to them are sent with your messages.</span>
+          </span>
+          <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={() => setGroupId(null)}>
             Clear
           </button>
         </div>
