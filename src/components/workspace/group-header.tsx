@@ -1,10 +1,12 @@
 "use client";
 
 import { DropdownMenu } from "radix-ui";
-import { GripVertical, MoreHorizontal, Sparkles, Unlink } from "lucide-react";
+import { GripVertical, Minus, MoreHorizontal, Sparkles, Unlink } from "lucide-react";
 import type { WorkGroup } from "@/lib/groups";
+import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
 import { IconButton } from "../ui/icon-button";
+import { focusAfterRender } from "./block-frame";
 
 export interface GroupActions {
   rename: (groupId: string, title: string) => void;
@@ -21,6 +23,12 @@ interface GroupHeaderProps {
 // The title bar of a work group. In Creative Mode its grip moves the whole group.
 export function GroupHeader({ group, actions, draggable }: GroupHeaderProps) {
   const { openAssistant } = useWorkspaceUI();
+  const { updateBlockConfig } = useWorkspaceData();
+
+  function minimize() {
+    for (const block of group.members) updateBlockConfig(block.id, { groupMinimized: true });
+    focusAfterRender(`[data-restore-group="${group.id}"]`);
+  }
 
   return (
     <div className="flex h-full min-w-0 items-center gap-1 px-1">
@@ -67,7 +75,10 @@ export function GroupHeader({ group, actions, draggable }: GroupHeaderProps) {
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
       ) : (
-        <IconButton size="sm" className="shrink-0" label={`Ask the assistant about ${group.title}`} icon={<Sparkles size={17} />} onClick={() => openAssistant({ mode: "chat", groupId: group.id })} />
+        <>
+          <IconButton size="sm" className="shrink-0" label={`Ask the assistant about ${group.title}`} icon={<Sparkles size={17} />} onClick={() => openAssistant({ mode: "chat", groupId: group.id })} />
+          <IconButton size="sm" className="shrink-0" label={`Minimize group ${group.title}`} icon={<Minus size={18} />} data-minimize-group={group.id} onClick={minimize} />
+        </>
       )}
     </div>
   );

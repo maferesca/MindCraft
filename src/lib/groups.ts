@@ -2,7 +2,7 @@
 // edits, so Undo, Redo, Cancel, and Save work without extra code. A group is the
 // set of blocks that carry the same group_id. Nothing here touches block content.
 
-import { GRID_COLUMNS, isMinimized } from "./blocks";
+import { GRID_COLUMNS, isGroupMinimized, isMinimized } from "./blocks";
 import { withPositions } from "./layout-edit";
 import type { Breakpoint, GridPosition, WorkspaceBlock } from "./types";
 
@@ -29,7 +29,7 @@ function overlaps(a: GridPosition, b: GridPosition) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-const inGrid = (block: WorkspaceBlock) => !block.hidden && !isMinimized(block);
+const inGrid = (block: WorkspaceBlock) => !block.hidden && !isMinimized(block) && !isGroupMinimized(block);
 
 // Blocks that the moved blocks now cover go underneath them. The grid then closes
 // any gaps, while the moved blocks keep their arrangement.

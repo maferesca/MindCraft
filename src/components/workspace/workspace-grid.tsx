@@ -4,8 +4,8 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import ReactGridLayout, { cloneLayout, getLayoutItem, moveElement, verticalCompactor, type Layout, type LayoutItem } from "react-grid-layout";
 import { noOverlapCompactor } from "react-grid-layout/core";
 import { Plus } from "lucide-react";
-import { BLOCK_DEFINITIONS, GRID_COLUMNS, ROW_HEIGHT, isMinimized, positionsForBreakpoint, sizeFor, sortForPhone } from "@/lib/blocks";
-import { keepGroupsTogether, workGroups } from "@/lib/groups";
+import { BLOCK_DEFINITIONS, GRID_COLUMNS, ROW_HEIGHT, isGroupMinimized, isMinimized, positionsForBreakpoint, sizeFor, sortForPhone } from "@/lib/blocks";
+import { keepGroupsTogether, workGroups, type WorkGroup } from "@/lib/groups";
 import type { BlockType, Breakpoint, WorkspaceBlock } from "@/lib/types";
 import { BlockIcon } from "../blocks/block-icon";
 import { useWorkspaceData } from "../providers/workspace-data";
@@ -38,12 +38,31 @@ interface SnapTarget {
   item: LayoutItem;
 }
 
-// Minimized blocks wait here as small icons and take no space in the grid.
-function MinimizedTray({ blocks }: { blocks: WorkspaceBlock[] }) {
+// Minimized blocks and groups wait here and take no space in the grid. A group
+// shows its name, because several icons alone would not say which group it is.
+function MinimizedTray({ blocks, groups }: { blocks: WorkspaceBlock[]; groups: WorkGroup[] }) {
   const { updateBlockConfig } = useWorkspaceData();
-  if (!blocks.length) return null;
+  if (!blocks.length && !groups.length) return null;
   return (
-    <ul aria-label="Minimized blocks" className="mb-4 flex flex-wrap gap-2">
+    <ul aria-label="Minimized blocks and groups" className="mb-4 flex flex-wrap gap-2">
+      {groups.map((group) => (
+        <li key={group.id} className="mc-card flex items-center gap-2 bg-primary-soft py-0.5 pl-3 pr-0.5">
+          {group.members.slice(0, 4).map((block) => (
+            <BlockIcon key={block.id} type={block.block_type} size={18} />
+          ))}
+          <span className="max-w-48 truncate font-semibold">{group.title}</span>
+          <IconButton
+            size="sm"
+            label={`Restore group ${group.title}`}
+            icon={<Plus size={18} />}
+            data-restore-group={group.id}
+            onClick={() => {
+              for (const block of group.members) updateBlockConfig(block.id, { groupMinimized: false });
+              focusAfterRender(`[data-minimize-group="${group.id}"]`);
+            }}
+          />
+        </li>
+      ))}
       {blocks.map((block) => {
         const title = block.title || BLOCK_DEFINITIONS[block.block_type].label;
         return (
@@ -68,8 +87,12 @@ function MinimizedTray({ blocks }: { blocks: WorkspaceBlock[] }) {
 
 export function WorkspaceGrid({ blocks, width, breakpoint, creative, draggingType, actionsFor, groupActions, onLayoutCommit, onSnapToGroup, onMoveGroup, onDropBlock }: WorkspaceGridProps) {
   const shown = blocks.filter((block) => !block.hidden);
-  const minimized = shown.filter(isMinimized);
-  const visible = shown.filter((block) => !isMinimized(block));
+  // Every block of a minimized group leaves the grid, even one added afterwards.
+  const minimizedGroupIds = new Set(shown.filter(isGroupMinimized).map((block) => block.group_id));
+  const inMinimizedGroup = (block: WorkspaceBlock) => minimizedGroupIds.has(block.group_id);
+  const minimizedGroups = workGroups(shown.filter(inMinimizedGroup));
+  const minimized = shown.filter((block) => isMinimized(block) && !inMinimizedGroup(block));
+  const visible = shown.filter((block) => !isMinimized(block) && !inMinimizedGroup(block));
   const [maximizedId, setMaximizedId] = useState<string | null>(null);
   const lastMaximized = useRef<string | null>(null);
   const maximized = creative ? null : (visible.find((block) => block.id === maximizedId) ?? null);
@@ -126,7 +149,7 @@ export function WorkspaceGrid({ blocks, width, breakpoint, creative, draggingTyp
     const ordered = keepGroupsTogether(sortForPhone(visible));
     return (
       <>
-      <MinimizedTray blocks={minimized} />
+      <MinimizedTray blocks={minimized} groups={minimizedGroups} />
       <ol className="flex flex-col gap-4" aria-label="Workspace blocks">
         {ordered.map((block, index) => {
           const group = block.group_id && ordered[index - 1]?.group_id !== block.group_id ? groups.find((item) => item.id === block.group_id) : null;
@@ -236,7 +259,7 @@ export function WorkspaceGrid({ blocks, width, breakpoint, creative, draggingTyp
 
   return (
     <>
-    <MinimizedTray blocks={minimized} />
+    <MinimizedTray blocks={minimized} groups={minimizedGroups} />
     <div
       ref={gridRef}
       className={`relative ${creative ? "mc-grid-guides min-h-[60vh]" : ""}`}

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildContextText } from "../ai/assistant-prompt";
 import { NO_INVENTED_FIGURES_REPLY, NO_PLAN_REPLY, sanitizeProposals, withoutEmptyPromise, withoutInventedFigures } from "../ai/proposal-guard";
-import { DAILY_PHRASES, dailyPhrase } from "../encouragement";
+import { DAILY_PHRASES, ENCOURAGEMENT_COOLDOWN_MS, SESSION_PHRASES, TASK_PHRASES, createEncouragementPicker, dailyPhrase } from "../encouragement";
+import { isGroupMinimized } from "../blocks";
 import { joinGroup, keepGroupsTogether, leaveGroup, moveGroup, removeGroup, renameGroup, workGroups } from "../groups";
 import { DEFAULT_PREFERENCES, normalizePreferences } from "../preferences";
 import type { AssistantContext } from "../schemas";
@@ -110,6 +111,12 @@ describe("work groups", () => {
     expect(removed).toHaveLength(3);
   });
 
+  it("minimizes as a group only while the block is in one", () => {
+    expect(isGroupMinimized({ group_id: "g", config: { groupMinimized: true } })).toBe(true);
+    expect(isGroupMinimized({ group_id: null, config: { groupMinimized: true } })).toBe(false);
+    expect(isGroupMinimized({ group_id: "g", config: { minimized: true } })).toBe(false);
+  });
+
   it("keeps a group's blocks together on a phone", () => {
     const ordered = [block("a", 0, 0, "notes", { group_id: "g" }), block("x", 0, 1), block("b", 0, 2, "notes", { group_id: "g" })];
     expect(keepGroupsTogether(ordered).map((item) => item.id)).toEqual(["a", "b", "x"]);
@@ -133,6 +140,34 @@ describe("daily phrase", () => {
   it("stays the same during a day and comes from the local list", () => {
     expect(dailyPhrase("2026-11-05")).toBe(dailyPhrase("2026-11-05"));
     expect(DAILY_PHRASES).toContain(dailyPhrase("2026-11-05"));
+  });
+
+  it("never repeats yesterday's phrase, including across months and years", () => {
+    const day = new Date("2026-01-01T00:00:00Z");
+    for (let i = 0; i < 800; i += 1) {
+      const today = day.toISOString().slice(0, 10);
+      day.setUTCDate(day.getUTCDate() + 1);
+      expect(dailyPhrase(day.toISOString().slice(0, 10))).not.toBe(dailyPhrase(today));
+    }
+  });
+});
+
+describe("progress encouragement", () => {
+  it("shows one message for several completions in a row", () => {
+    const picker = createEncouragementPicker();
+    expect(picker.next("task", 1000)).toBe(TASK_PHRASES[0]);
+    expect(picker.next("task", 1500)).toBeNull();
+    expect(picker.next("session", 2000)).toBeNull();
+  });
+
+  it("uses different phrases for tasks and sessions, and takes turns", () => {
+    const picker = createEncouragementPicker();
+    const later = ENCOURAGEMENT_COOLDOWN_MS + 1;
+    expect(picker.next("task", 0)).toBe(TASK_PHRASES[0]);
+    expect(picker.next("session", later)).toBe(SESSION_PHRASES[0]);
+    expect(picker.next("task", later * 2)).toBe(TASK_PHRASES[1]);
+    expect(picker.next("session", later * 3)).toBe(SESSION_PHRASES[1]);
+    expect(TASK_PHRASES.some((phrase) => (SESSION_PHRASES as readonly string[]).includes(phrase))).toBe(false);
   });
 });
 

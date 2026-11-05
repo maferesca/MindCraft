@@ -182,10 +182,21 @@ function WorkspaceSection() {
           <input type="checkbox" className="h-5 w-5" checked={preferences.dailyWelcome} onChange={(event) => updatePreferences({ dailyWelcome: event.target.checked })} />
           Show the daily welcome card
         </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" className="h-5 w-5" checked={preferences.motivationalMessages} onChange={(event) => updatePreferences({ motivationalMessages: event.target.checked })} />
-          Show motivational messages
-        </label>
+        <div>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              className="h-5 w-5"
+              aria-describedby="motivational-messages-hint"
+              checked={preferences.motivationalMessages}
+              onChange={(event) => updatePreferences({ motivationalMessages: event.target.checked })}
+            />
+            Motivational messages
+          </label>
+          <p id="motivational-messages-hint" className="mc-hint pl-7">
+            Show daily encouragement and messages after tasks and focus sessions.
+          </p>
+        </div>
         <label className="flex items-center gap-2">
           <input type="checkbox" className="h-5 w-5" checked={preferences.showStreak} onChange={(event) => updatePreferences({ showStreak: event.target.checked })} />
           Show the visit streak in the header

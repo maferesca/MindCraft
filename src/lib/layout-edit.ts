@@ -1,7 +1,7 @@
 // Pure functions for Creative Mode edits. Each returns a new block array,
 // which makes Undo/Redo a simple history of arrays.
 
-import { BLOCK_DEFINITIONS, GRID_COLUMNS, findFreePosition, isMinimized, positionsForBreakpoint, sizeFor, sortForPhone } from "./blocks";
+import { BLOCK_DEFINITIONS, GRID_COLUMNS, findFreePosition, isGroupMinimized, isMinimized, positionsForBreakpoint, sizeFor, sortForPhone } from "./blocks";
 import type { BlockType, Breakpoint, GridPosition, WorkspaceBlock } from "./types";
 
 export type SizePreset = "small" | "medium" | "large" | "full";
@@ -72,7 +72,7 @@ export function addBlockToDraft(
 
 function readingOrder(blocks: WorkspaceBlock[], breakpoint: Breakpoint | "sm") {
   // A minimized block is not in the grid, so moving must not swap places with it.
-  const visible = blocks.filter((block) => !block.hidden && !isMinimized(block));
+  const visible = blocks.filter((block) => !block.hidden && !isMinimized(block) && !isGroupMinimized(block));
   if (breakpoint === "sm") return sortForPhone(visible);
   return [...visible].sort((a, b) => {
     const pa = a.layouts[breakpoint]!;

@@ -159,6 +159,7 @@ A group is the set of blocks that share a `group_id`, and `group_title` holds it
 - **Snap:** drag a block by its grip until the pointer is over another block's header row or a group's title bar, and a dashed target appears. Dropping there groups them. Dropping anywhere else only moves the block.
 - **Stillness:** other blocks stay still during a drag, so a target never moves away from the pointer. They make room when the block is dropped.
 - **Title bar:** a one-row grid item computed from the group's blocks, which is why it can be dragged. Moving it shifts every block by the same amount.
+- **Minimize:** the title bar minimizes the whole group to a named chip in the tray above the workspace, saved like a block's minimize. A separate `groupMinimized` flag means restoring the group does not reopen a block that was minimized on its own. Timers in a minimized group keep running.
 - **Menus:** the block's three-dot menu offers Add to group and Remove from group, and the group's menu offers Remove group, keep blocks. These work on phones, where nothing is dragged.
 
 The shared background is drawn per block, so it never covers a block outside the group. Grouping never changes a block's content or its tasks.
@@ -169,7 +170,11 @@ Each timer block has its own name, length, and linked task or activity in `confi
 
 ### Encouragement
 
-The welcome card shows one phrase per day from a local list in `src/lib/encouragement.ts`. A short message follows a completed task or focus session, and only after the save succeeds. **Show motivational messages** in **Settings > Workspace** turns these off. Save, error, and timer status messages always stay.
+The workspace shows one phrase per local calendar day, centered at the top, from a list in `src/lib/encouragement.ts`, chosen by day number so two days in a row never match. It needs no AI request and no dismissal, and it renders with the rest of the workspace, so a saved "off" never flashes.
+
+A short message follows a completed task or a finished focus session, only after the save succeeds. Tasks and sessions have different phrases. One message shows at most every 30 seconds, and it stays silent while another message is showing. A session that ended while the page was closed shows its status without a message, and reloading never replays one.
+
+**Motivational messages** in **Settings > Workspace** is on by default and saved with the account. Turning it off removes the phrase and any message on screen at once. Save, error, and timer status messages always stay.
 
 ### Personal adaptation
 

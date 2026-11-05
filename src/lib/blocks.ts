@@ -64,6 +64,12 @@ export function isMinimized(block: Pick<WorkspaceBlock, "config">) {
   return block.config.minimized === true;
 }
 
+// A whole group minimizes with its own flag, so restoring it does not reopen a
+// block that was minimized on its own. Outside a group the flag means nothing.
+export function isGroupMinimized(block: Pick<WorkspaceBlock, "config" | "group_id">) {
+  return Boolean(block.group_id) && block.config.groupMinimized === true;
+}
+
 // Desktop is "lg", tablet is "md", phones use a one-column list.
 export function breakpointForWidth(width: number): Breakpoint | "sm" {
   if (width >= 1024) return "lg";

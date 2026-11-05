@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, us
 import { cacheAppearance } from "@/lib/appearance-cache";
 import { blockPlacement } from "@/lib/block-capabilities";
 import { BLOCK_DEFINITIONS, GRID_COLUMNS, findFreePosition, sizeFor } from "@/lib/blocks";
-import { TASK_COMPLETED_MESSAGE } from "@/lib/encouragement";
+import { createEncouragementPicker, type EncouragementKind } from "@/lib/encouragement";
 import { clearSessionData } from "@/lib/clear-session-data";
 import { createLocalRepository } from "@/lib/data/local-repository";
 import { RepositoryError, type Repository, type Row, type TableName } from "@/lib/data/repository";
@@ -37,6 +37,8 @@ import type {
 import { useNotify } from "../ui/notifications";
 
 type Status = "loading" | "ready" | "signed_out" | "error";
+
+const ENCOURAGEMENT_GROUP = "encouragement";
 
 export interface DeletedTaskSnapshot {
   task: Task;
@@ -81,6 +83,8 @@ interface WorkspaceData {
 
   // Resolves to false when the change could not be saved.
   updatePreferences: (patch: Partial<Preferences>) => Promise<boolean>;
+  // Call only after the action was saved. It respects the preference and the frequency limit.
+  encourage: (kind: EncouragementKind) => void;
   updateProfile: (patch: Partial<Profile>) => Promise<void>;
   updateNotificationPreferences: (patch: Partial<NotificationPreferences>) => Promise<void>;
   renameWorkspace: (name: string) => Promise<void>;
@@ -206,7 +210,8 @@ function useCollectionActions<T extends { id: string }>(
 }
 
 export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
-  const { notify } = useNotify();
+  const { notify, dismissGroup } = useNotify();
+  const [encouragements] = useState(createEncouragementPicker);
   const repoRef = useRef<Repository | null>(null);
   const preferencesRef = useRef<Preferences>(DEFAULT_PREFERENCES);
   const [writes] = useState(createWriteTracker);
@@ -338,6 +343,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       setPreferences(next);
       applyPreferencesToDocument(next);
       cacheAppearance(next);
+      if (!next.motivationalMessages) dismissGroup(ENCOURAGEMENT_GROUP);
       try {
         await requireRepo(repoRef).update("preferences", requireRepo(repoRef).userId, { settings: next });
         return true;
@@ -346,7 +352,16 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [reportError],
+    [dismissGroup, reportError],
+  );
+
+  const encourage = useCallback(
+    (kind: EncouragementKind) => {
+      if (!preferencesRef.current.motivationalMessages) return;
+      const message = encouragements.next(kind, Date.now());
+      if (message) notify(message, { tone: "encouragement", group: ENCOURAGEMENT_GROUP, onlyIfQuiet: true, durationMs: 6000 });
+    },
+    [encouragements, notify],
   );
 
   const updateProfile = useCallback(
@@ -433,7 +448,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const updated = await requireRepo(repoRef).update<Task>("tasks", id, patch as Row);
         setTasks((current) => current.map((task) => (task.id === id ? updated : task)));
         // Only after the save succeeded, so this message is always true.
-        if (patch.status === "done" && before?.status !== "done" && preferencesRef.current.motivationalMessages) notify(TASK_COMPLETED_MESSAGE);
+        if (patch.status === "done" && before?.status !== "done") encourage("task");
         return true;
       } catch (error) {
         if (before) setTasks((current) => current.map((task) => (task.id === id ? before : task)));
@@ -441,7 +456,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [tasks, notify, reportError],
+    [tasks, encourage, reportError],
   );
 
   const deleteTask = useCallback(
@@ -1047,6 +1062,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     streak,
     previousVisitDate,
     updatePreferences,
+    encourage,
     updateProfile,
     updateNotificationPreferences,
     renameWorkspace,

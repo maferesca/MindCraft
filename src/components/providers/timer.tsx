@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { SESSION_FINISHED_MESSAGE } from "@/lib/encouragement";
 import type { Preferences, TimerSession } from "@/lib/preferences";
 import * as timer from "@/lib/timer";
 import { useNotify } from "../ui/notifications";
@@ -61,9 +60,10 @@ function runningTimerId(preferences: Preferences) {
 // change of view never resets it. Time comes from timestamps, so background tabs
 // stay accurate. Nothing starts by itself, and no timer ever changes a task.
 export function TimerProvider({ children }: { children: ReactNode }) {
-  const { preferences, updatePreferences, blocks, updateBlockConfig } = useWorkspaceData();
+  const { preferences, updatePreferences, encourage, blocks, updateBlockConfig } = useWorkspaceData();
   const { announce, notify } = useNotify();
   const [now, setNow] = useState(() => Date.now());
+  const [loadedAt] = useState(() => Date.now());
   const runningId = runningTimerId(preferences);
   const running = runningId ? sessionOf(preferences, runningId) : null;
 
@@ -89,11 +89,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   // The session status always shows. The encouraging line needs a confirmed save.
   const saveFinished = useCallback(
-    async (id: string, finished: TimerSession) => {
+    async (id: string, finished: TimerSession, canEncourage = true) => {
       const saved = await updatePreferences(withSession({}, preferences, id, finished));
-      if (saved && finished.phase === "work" && preferences.motivationalMessages) notify(SESSION_FINISHED_MESSAGE);
+      if (saved && canEncourage && finished.phase === "work") encourage("session");
     },
-    [preferences, updatePreferences, notify],
+    [preferences, updatePreferences, encourage],
   );
 
   useEffect(() => {
@@ -104,7 +104,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       if (!timer.hasExpired(running, current)) return;
       playChime();
       announce(running.phase === "work" ? "Session finished." : "Break finished.");
-      saveFinished(runningId, timer.finish(running, current, "zero"));
+      // A session that ended while the page was closed finished quietly earlier.
+      const endedAt = (running.startedAt ?? current) + running.targetMs - running.accumulatedMs;
+      saveFinished(runningId, timer.finish(running, current, "zero"), endedAt >= loadedAt);
     };
     tick();
     const interval = window.setInterval(tick, 500);
@@ -114,7 +116,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", tick);
     };
-  }, [runningId, running, announce, playChime, saveFinished]);
+  }, [runningId, running, loadedAt, announce, playChime, saveFinished]);
 
   // A removed timer block takes its session with it.
   useEffect(() => {

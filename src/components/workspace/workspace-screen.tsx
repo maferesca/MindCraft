@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AssistantButton, AssistantPanel } from "../assistant/assistant-panel";
 import { FocusMode } from "../focus/focus-mode";
+import { DailyPhrase } from "../planning/daily-phrase";
 import { DailyWelcomeCard } from "../planning/daily-welcome-card";
 import { PlanningDialog } from "../planning/planning-dialog";
 import { AppProviders } from "../providers/app-providers";
@@ -48,6 +49,7 @@ function WorkspaceLayout() {
           <>
             {!creativeMode ? (
               <>
+                <DailyPhrase />
                 <ReminderBanner />
                 <DailyWelcomeCard />
               </>
