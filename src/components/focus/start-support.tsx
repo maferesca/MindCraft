@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { HelpRequest } from "@/lib/schemas";
 import type { Task } from "@/lib/types";
 import { useTimer } from "../providers/timer";
+import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
 
 const SHORT_SESSION_MINUTES = 10;
@@ -22,6 +23,7 @@ const OPTIONS: Array<{ id: HelpRequest; label: string; message: (title: string) 
 export function StartSupport({ task, onShowTimer }: { task: Task; onShowTimer: () => void }) {
   const { openAssistant } = useWorkspaceUI();
   const timer = useTimer();
+  const { claimProgress } = useWorkspaceData();
   const [chosen, setChosen] = useState<HelpRequest | null>(null);
   const idle = timer.session.runState === "idle";
 
@@ -50,7 +52,7 @@ export function StartSupport({ task, onShowTimer }: { task: Task; onShowTimer: (
         ))}
       </div>
       {chosen === "distracted" && idle ? (
-        <button type="button" className="mc-btn mc-btn-primary mc-btn-sm mt-2" onClick={() => timer.startShortSession(SHORT_SESSION_MINUTES, task.id)}>
+        <button type="button" className="mc-btn mc-btn-primary mc-btn-sm mt-2" onClick={() => { timer.startShortSession(SHORT_SESSION_MINUTES, task.id); claimProgress("focus_start", task.id); }}>
           <Play size={16} aria-hidden="true" /> Start a {SHORT_SESSION_MINUTES}-minute session
         </button>
       ) : null}

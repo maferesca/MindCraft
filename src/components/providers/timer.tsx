@@ -60,7 +60,7 @@ function runningTimerId(preferences: Preferences) {
 // change of view never resets it. Time comes from timestamps, so background tabs
 // stay accurate. Nothing starts by itself, and no timer ever changes a task.
 export function TimerProvider({ children }: { children: ReactNode }) {
-  const { preferences, updatePreferences, encourage, blocks, updateBlockConfig } = useWorkspaceData();
+  const { preferences, updatePreferences, encourage, trackFocusSession, blocks, updateBlockConfig } = useWorkspaceData();
   const { announce, notify } = useNotify();
   const [now, setNow] = useState(() => Date.now());
   const [loadedAt] = useState(() => Date.now());
@@ -91,9 +91,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const saveFinished = useCallback(
     async (id: string, finished: TimerSession, canEncourage = true) => {
       const saved = await updatePreferences(withSession({}, preferences, id, finished));
+      if (saved && finished.phase === "work") trackFocusSession("finish");
       if (saved && canEncourage && finished.phase === "work") encourage("session");
     },
-    [preferences, updatePreferences, encourage],
+    [preferences, updatePreferences, encourage, trackFocusSession],
   );
 
   useEffect(() => {
@@ -175,6 +176,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       },
       startNewSession: () => {
         run(id, (current, time) => timer.start({ ...current, phase: "work" }, time, current.mode === "countdown" ? durationMs : 0));
+        trackFocusSession("begin");
         announce("Session started.");
       },
       pause: () => {
@@ -200,6 +202,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       },
       startShortSession: (value, taskId) => {
         run(id, (current, time) => timer.start({ ...current, mode: "countdown", taskId }, time, value * 60_000));
+        trackFocusSession("begin");
         announce("Session started.");
       },
     };

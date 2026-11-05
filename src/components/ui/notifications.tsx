@@ -6,12 +6,15 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
 interface Toast {
   id: number;
   message: string;
+  // Extra lines shown under the message, such as the rewards of a completed task.
+  details?: string[];
   tone: "info" | "error" | "encouragement";
   action?: { label: string; onClick: () => void };
   group?: string;
 }
 
 interface NotifyOptions {
+  details?: string[];
   tone?: Toast["tone"];
   action?: Toast["action"];
   durationMs?: number;
@@ -61,8 +64,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     (message, options = {}) => {
       if (options.onlyIfQuiet && toastsRef.current.length) return;
       const id = nextId.current++;
-      updateToasts([...toastsRef.current.slice(-2), { id, message, tone: options.tone ?? "info", action: options.action, group: options.group }]);
-      announce(message);
+      updateToasts([...toastsRef.current.slice(-2), { id, message, details: options.details, tone: options.tone ?? "info", action: options.action, group: options.group }]);
+      announce([message, ...(options.details ?? [])].join(". "));
       window.setTimeout(() => dismiss(id), options.durationMs ?? (options.action ? 8000 : 5000));
     },
     [announce, dismiss, updateToasts],
@@ -83,7 +86,14 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
             className={`mc-card pointer-events-auto flex max-w-lg items-center gap-3 shadow-lg ${TOAST_STYLES[toast.tone]}`}
           >
             {toast.tone === "encouragement" ? <Sparkles size={20} className="shrink-0 text-primary" aria-hidden="true" /> : null}
-            <p className={toast.tone === "error" ? "font-semibold text-danger" : toast.tone === "encouragement" ? "text-lg font-semibold" : "font-medium"}>{toast.message}</p>
+            <div className="min-w-0">
+              <p className={toast.tone === "error" ? "font-semibold text-danger" : toast.tone === "encouragement" ? "text-lg font-semibold" : "font-medium"}>{toast.message}</p>
+              {toast.details?.map((line) => (
+                <p key={line} className="text-sm">
+                  {line}
+                </p>
+              ))}
+            </div>
             {toast.action ? (
               <button
                 type="button"

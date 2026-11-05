@@ -78,6 +78,9 @@ export const preferencesSchema = z.object({
   timerSessions: z.record(z.string(), timerSessionSchema),
   activeTimerId: z.string().nullable(),
   motivationalMessages: z.boolean(),
+  rewardsEnabled: z.boolean(),
+  xpNotifications: z.boolean(),
+  levelUpMessages: z.boolean(),
   showStreak: z.boolean(),
   dailyWelcome: z.boolean(),
 });
@@ -111,6 +114,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   timerSessions: {},
   activeTimerId: null,
   motivationalMessages: true,
+  rewardsEnabled: true,
+  xpNotifications: true,
+  levelUpMessages: true,
   showStreak: true,
   dailyWelcome: true,
 };

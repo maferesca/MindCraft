@@ -98,7 +98,7 @@ function GuideContent({ task, config, setConfig }: { task: Task; config: GuideCo
       </Section>
 
       <Section title="Steps" open={config.stepsOpen} onToggle={(stepsOpen) => setConfig({ stepsOpen })}>
-        <CurrentStep task={task} onAllDone={() => setConfig({ reviewOpen: true })} />
+        <CurrentStep task={task} inTaskGuide onAllDone={() => setConfig({ reviewOpen: true })} />
       </Section>
 
       <Section title="Before submitting" open={config.reviewOpen} onToggle={(reviewOpen) => setConfig({ reviewOpen })}>

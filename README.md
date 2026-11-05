@@ -56,7 +56,7 @@ Email confirmation follows your Supabase Auth settings. If confirmation is on, s
 
    See `.env.example` for the optional variables. Changing a `NEXT_PUBLIC_` value requires a new deployment, because it is built into the browser code. Never add the Supabase service role key.
 2. In Supabase **Authentication > URL Configuration**, set **Site URL** to the production URL and add `https://your-domain/auth/callback` to **Redirect URLs**. If the callback is not allowed, Supabase falls back to the Site URL, so a Site URL left on localhost sends email links to localhost.
-3. Apply any new files in `supabase/migrations/`, ideally before deploying. Without `20261105000000_task_estimates.sql`, confirmed plans still save but lose their estimated minutes, and the task form cannot save an estimate. `20261106000000_task_blocks_and_groups.sql` must run before deploying the code that uses it: tasks and layouts cannot save without its columns. It changes no existing rows.
+3. Apply any new files in `supabase/migrations/`, ideally before deploying. Without `20261105000000_task_estimates.sql`, confirmed plans still save but lose their estimated minutes, and the task form cannot save an estimate. `20261106000000_task_blocks_and_groups.sql` must run before deploying the code that uses it: tasks and layouts cannot save without its columns. It changes no existing rows. `20261107000000_mindcraft_journey.sql` adds XP, levels, and achievements. The app keeps working without it, but tasks then earn nothing.
 4. Run `npm run verify` and `npm run build`, then deploy. A push to the production branch deploys it. Other branches get a preview deployment.
 5. After deploying, request a password reset and confirm that the email link opens the production site.
 
@@ -167,6 +167,26 @@ The shared background is drawn per block, so it never covers a block outside the
 ### Timers
 
 Each timer block has its own name, length, and linked task or activity in `config`, and its own session in `preferences.timerSessions`. Sessions are stored as timestamps, so a refresh, a change of view, or a background tab never resets or slows them. Only one timer runs at a time: starting another pauses the first and says so. **Start new session** always uses the configured length, and asks first if it would replace an unfinished session. Focus Mode shows the timer in use without touching its session. Finishing a session never completes a task.
+
+### MindCraft Journey
+
+XP, levels, and achievements reward progress on your own work. There are no rankings, and XP is never subtracted.
+
+**The database decides every reward.** Clients can read their own progress under RLS, but no write policy exists, and the function that awards XP cannot be called. Completing a task or resolving a blocker earns XP through a trigger in the same transaction as the save. For the two actions the database can't see, the browser calls `award_focus_start` or `award_first_step`. Those take no amount, and they check the caller's own records. A reward problem is logged and never stops work from saving.
+
+| Action | XP | Limit |
+| --- | --- | --- |
+| Start a focus session on the selected task in Focus Mode | +5 | Once per task, 10 per day |
+| Complete a task | +20 | Once per task, 20 per day |
+| Finish before the deadline | Up to +15 | With the completion reward |
+| Resolve a blocker recorded at least 5 minutes earlier | +10 | Once per blocker, 5 per day |
+| Complete a task's first step in the Task guide | +5 | Once per task, 10 per day |
+
+`xp_transactions` has a unique key on user, action, and source, kept after the task is deleted, so retries, reopening, and undo can't repeat a reward. A task with the same title as one rewarded in the last 24 hours earns nothing, so recreating work doesn't either.
+
+**Deadline bonus.** `remaining = (deadline - completed) / (deadline - deadline set)`: 50% or more earns +15, 20% or more earns +10, and anything above zero earns +5. It uses `tasks.xp_deadline`, the first deadline a task received, which a trigger protects from edits. A date with no time means the end of that day in the profile's timezone. No bonus applies with under an hour of notice, or within 5 minutes of setting the deadline, and under six hours of notice earns at most +5.
+
+**Levels** are a list in `src/lib/xp.ts`. Add a row to extend them. Focus Explorer counts sessions of at least five minutes on the server's clock, from any focus timer. Disabling rewards in **Settings > Motivation & Rewards** only hides them, and progress keeps being recorded. The local demo mirrors these rules in `src/lib/data/local-progress.ts`.
 
 ### Encouragement
 

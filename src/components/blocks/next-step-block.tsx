@@ -25,8 +25,8 @@ const SUGGEST_LABELS: Record<Preferences["planningStyle"], string> = {
 // Step guidance shared by the Task guide block and Focus Mode. The assistance level
 // and view are personal preferences that only change what is shown: the steps and
 // their progress stay on the task. Completing a step never completes the task.
-export function CurrentStep({ task, onAllDone }: { task: Task; onAllDone?: () => void }) {
-  const { steps, preferences, updatePreferences, addStep, updateStep, deleteStep } = useWorkspaceData();
+export function CurrentStep({ task, onAllDone, inTaskGuide = false }: { task: Task; onAllDone?: () => void; inTaskGuide?: boolean }) {
+  const { steps, preferences, updatePreferences, addStep, updateStep, deleteStep, claimProgress } = useWorkspaceData();
   const { openAssistant } = useWorkspaceUI();
   const { announce } = useNotify();
   const [editing, setEditing] = useState(false);
@@ -42,6 +42,7 @@ export function CurrentStep({ task, onAllDone }: { task: Task; onAllDone?: () =>
     if (!step) return;
     await updateStep(step.id, { done: true });
     announce("Step done. The task stays open until you mark it done.");
+    if (inTaskGuide && step.id === taskSteps[0]?.id) claimProgress("first_step", task.id);
   }
 
   return (

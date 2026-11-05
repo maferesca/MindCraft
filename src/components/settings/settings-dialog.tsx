@@ -19,6 +19,7 @@ const SECTIONS: Array<[SettingsSection, string]> = [
   ["appearance", "Appearance and reading"],
   ["workspace", "Workspace"],
   ["notifications", "Notifications"],
+  ["rewards", "Motivation & Rewards"],
   ["ai", "AI and privacy"],
   ["account", "Account"],
 ];
@@ -51,6 +52,9 @@ export function SettingsDialog() {
         </Tabs.Content>
         <Tabs.Content value="notifications">
           <NotificationsSection />
+        </Tabs.Content>
+        <Tabs.Content value="rewards">
+          <RewardsSection />
         </Tabs.Content>
         <Tabs.Content value="ai">
           <AiSection />
@@ -291,6 +295,28 @@ function NotificationsSection() {
           </div>
         </>
       ) : null}
+    </div>
+  );
+}
+
+function RewardsSection() {
+  const { preferences, updatePreferences } = useWorkspaceData();
+  const off = !preferences.rewardsEnabled;
+  return (
+    <div className="flex max-w-2xl flex-col gap-3">
+      <p className="mc-hint">Turning rewards off only hides them. Your XP, level, and achievements stay saved, and they return when you turn rewards on.</p>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" className="h-5 w-5" checked={preferences.rewardsEnabled} onChange={(event) => updatePreferences({ rewardsEnabled: event.target.checked })} />
+        Enable rewards
+      </label>
+      <label className={`flex items-center gap-2 ${off ? "text-text-muted" : ""}`}>
+        <input type="checkbox" className="h-5 w-5" disabled={off} checked={preferences.xpNotifications} onChange={(event) => updatePreferences({ xpNotifications: event.target.checked })} />
+        Show XP notifications
+      </label>
+      <label className={`flex items-center gap-2 ${off ? "text-text-muted" : ""}`}>
+        <input type="checkbox" className="h-5 w-5" disabled={off} checked={preferences.levelUpMessages} onChange={(event) => updatePreferences({ levelUpMessages: event.target.checked })} />
+        Show level-up celebrations
+      </label>
     </div>
   );
 }

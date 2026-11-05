@@ -168,6 +168,22 @@ export interface Streak {
   last_visit_date: string | null;
 }
 
+export type XpAction = "focus_start" | "task_complete" | "early_bonus" | "blocker_resolved" | "first_step";
+export type Achievement = "first_step" | "focus_explorer" | "problem_solver" | "early_bird" | "task_builder";
+
+export interface XpTransaction {
+  id: string;
+  action: XpAction;
+  amount: number;
+  label: string;
+  created_at: string;
+}
+
+export interface UserAchievement {
+  achievement: Achievement;
+  unlocked_at: string;
+}
+
 export interface NotificationPreferences {
   user_id: string;
   style: "off" | "friendly" | "playful" | "minimal";

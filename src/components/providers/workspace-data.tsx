@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { cacheAppearance } from "@/lib/appearance-cache";
 import { blockPlacement } from "@/lib/block-capabilities";
+import { ACHIEVEMENTS, levelProgress, rewardFeedback } from "@/lib/xp";
 import { BLOCK_DEFINITIONS, GRID_COLUMNS, findFreePosition, sizeFor } from "@/lib/blocks";
 import { createEncouragementPicker, type EncouragementKind } from "@/lib/encouragement";
 import { clearSessionData } from "@/lib/clear-session-data";
@@ -31,14 +32,17 @@ import type {
   Streak,
   Task,
   TaskStep,
+  UserAchievement,
   Workspace,
   WorkspaceBlock,
+  XpTransaction,
 } from "@/lib/types";
 import { useNotify } from "../ui/notifications";
 
 type Status = "loading" | "ready" | "signed_out" | "error";
 
 const ENCOURAGEMENT_GROUP = "encouragement";
+const REWARDS_GROUP = "rewards";
 
 export interface DeletedTaskSnapshot {
   task: Task;
@@ -54,6 +58,24 @@ interface CollectionActions<T> {
   create: (input: Partial<T>) => Promise<T | null>;
   update: (id: string, patch: Partial<T>) => Promise<boolean>;
   remove: (id: string) => Promise<boolean>;
+}
+
+export interface Progress {
+  totalXp: number;
+  // Newest first.
+  transactions: XpTransaction[];
+  achievements: UserAchievement[];
+}
+
+const NO_PROGRESS: Progress = { totalXp: 0, transactions: [], achievements: [] };
+
+async function readProgress(repo: Repository): Promise<Progress> {
+  const [totals, transactions, achievements] = await Promise.all([
+    repo.list<{ total_xp: number }>("user_progress"),
+    repo.list<XpTransaction>("xp_transactions"),
+    repo.list<UserAchievement>("user_achievements"),
+  ]);
+  return { totalXp: totals[0]?.total_xp ?? 0, transactions: [...transactions].sort((a, b) => b.created_at.localeCompare(a.created_at)), achievements };
 }
 
 interface WorkspaceData {
@@ -80,11 +102,16 @@ interface WorkspaceData {
   messages: ChatMessage[];
   streak: Streak | null;
   previousVisitDate: string | null;
+  progress: Progress;
 
   // Resolves to false when the change could not be saved.
   updatePreferences: (patch: Partial<Preferences>) => Promise<boolean>;
   // Call only after the action was saved. It respects the preference and the frequency limit.
   encourage: (kind: EncouragementKind) => void;
+  // For rewards the database can't see by itself. It checks the facts and decides.
+  claimProgress: (action: "focus_start" | "first_step", taskId: string) => Promise<void>;
+  // Sessions are timed on the server, so one can't be claimed without passing time.
+  trackFocusSession: (event: "begin" | "finish") => void;
   updateProfile: (patch: Partial<Profile>) => Promise<void>;
   updateNotificationPreferences: (patch: Partial<NotificationPreferences>) => Promise<void>;
   renameWorkspace: (name: string) => Promise<void>;
@@ -212,6 +239,8 @@ function useCollectionActions<T extends { id: string }>(
 export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const { notify, dismissGroup } = useNotify();
   const [encouragements] = useState(createEncouragementPicker);
+  const [progress, setProgress] = useState<Progress>(NO_PROGRESS);
+  const progressRef = useRef<Progress>(NO_PROGRESS);
   const repoRef = useRef<Repository | null>(null);
   const preferencesRef = useRef<Preferences>(DEFAULT_PREFERENCES);
   const [writes] = useState(createWriteTracker);
@@ -291,6 +320,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const loadedPreferences = normalizePreferences(prefRows[0]?.settings);
         const currentConversation = conversations[0]?.id ?? null;
         const loadedMessages = currentConversation ? await repo.list<ChatMessage>("messages") : [];
+        // Rewards are extra. If they can't load, the workspace still opens.
+        const loadedProgress = await readProgress(repoRef.current!).catch(() => NO_PROGRESS);
         const previous = await repo.getStreak();
         const visit = await repo.recordVisit(currentProfile?.timezone ?? browserTimezone());
         if (cancelled) return;
@@ -316,6 +347,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         setMessages(loadedMessages);
         setPreviousVisitDate(previous?.last_visit_date ?? null);
         setStreak(visit);
+        progressRef.current = loadedProgress;
+        setProgress(loadedProgress);
         setStatus("ready");
       } catch (error) {
         if (cancelled) return;
@@ -364,6 +397,63 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     [encouragements, notify],
   );
 
+  // Reads what the database awarded and shows each new reward once. Comparing with
+  // what is already known means reloading the page never replays anything.
+  const reviewProgress = useCallback(async () => {
+    const next = await readProgress(requireRepo(repoRef)).catch(() => null);
+    if (!next) return false;
+    const previous = progressRef.current;
+    const known = new Set(previous.transactions.map((reward) => reward.id));
+    const fresh = next.transactions.filter((reward) => !known.has(reward.id));
+    const knownAchievements = new Set(previous.achievements.map((item) => item.achievement));
+    const unlocked = next.achievements.filter((item) => !knownAchievements.has(item.achievement));
+    progressRef.current = next;
+    setProgress(next);
+
+    const settings = preferencesRef.current;
+    if (!settings.rewardsEnabled) return false;
+    let shown = false;
+    if (settings.xpNotifications && (fresh.length || unlocked.length)) {
+      const { title, lines } = fresh.length ? rewardFeedback(fresh) : { title: "Achievement unlocked", lines: [] as string[] };
+      dismissGroup(REWARDS_GROUP);
+      notify(title, {
+        tone: "encouragement",
+        group: REWARDS_GROUP,
+        durationMs: 7000,
+        details: [...lines, ...unlocked.map((item) => `Achievement: ${ACHIEVEMENTS[item.achievement].name}`)],
+      });
+      shown = true;
+    }
+    const before = levelProgress(previous.totalXp).current;
+    const after = levelProgress(next.totalXp).current;
+    if (settings.levelUpMessages && after.level > before.level) {
+      notify("Level up!", { tone: "encouragement", details: [`You've reached Level ${after.level} — ${after.name}.`], durationMs: 7000 });
+      shown = true;
+    }
+    return shown;
+  }, [notify, dismissGroup]);
+
+  const claimProgress = useCallback(
+    async (action: "focus_start" | "first_step", taskId: string) => {
+      try {
+        await requireRepo(repoRef).claimProgress(action, taskId);
+        await reviewProgress();
+      } catch (error) {
+        // A reward must never get in the way of the work itself.
+        console.error(error);
+      }
+    },
+    [reviewProgress],
+  );
+
+  const trackFocusSession = useCallback(
+    (event: "begin" | "finish") => {
+      const repo = requireRepo(repoRef);
+      (event === "begin" ? repo.beginFocusSession() : repo.finishFocusSession().then(reviewProgress)).catch((error) => console.error(error));
+    },
+    [reviewProgress],
+  );
+
   const updateProfile = useCallback(
     async (patch: Partial<Profile>) => {
       try {
@@ -408,7 +498,15 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
   const reviewActions = useCollectionActions<ReviewItem>("task_review_items", setReviewItems, repoRef, reportError);
   const resourceActions = useCollectionActions<Resource>("resources", setResources, repoRef, reportError);
-  const checkInActions = useCollectionActions<CheckIn>("check_ins", setCheckIns, repoRef, reportError);
+  const checkInCollection = useCollectionActions<CheckIn>("check_ins", setCheckIns, repoRef, reportError);
+  const checkInActions: CollectionActions<CheckIn> = {
+    ...checkInCollection,
+    update: async (id, patch) => {
+      const saved = await checkInCollection.update(id, patch);
+      if (saved && patch.help_status === "resolved") reviewProgress();
+      return saved;
+    },
+  };
   const projectActions = useCollectionActions<Project>("projects", setProjects, repoRef, reportError);
   const createProject = projectActions.create;
 
@@ -448,7 +546,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const updated = await requireRepo(repoRef).update<Task>("tasks", id, patch as Row);
         setTasks((current) => current.map((task) => (task.id === id ? updated : task)));
         // Only after the save succeeded, so this message is always true.
-        if (patch.status === "done" && before?.status !== "done") encourage("task");
+        // The XP message says it all when there is one, so only one message shows.
+        if (patch.status === "done" && before?.status !== "done") {
+          reviewProgress().then((shown) => {
+            if (!shown) encourage("task");
+          });
+        }
         return true;
       } catch (error) {
         if (before) setTasks((current) => current.map((task) => (task.id === id ? before : task)));
@@ -456,7 +559,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [tasks, encourage, reportError],
+    [tasks, encourage, reviewProgress, reportError],
   );
 
   const deleteTask = useCallback(
@@ -1060,9 +1163,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     events,
     messages,
     streak,
+    progress,
     previousVisitDate,
     updatePreferences,
     encourage,
+    claimProgress,
+    trackFocusSession,
     updateProfile,
     updateNotificationPreferences,
     renameWorkspace,

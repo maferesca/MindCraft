@@ -7,6 +7,7 @@ import { openTasks, taskBlocks, tasksForBlock } from "@/lib/task-helpers";
 import type { WorkspaceBlock } from "@/lib/types";
 import { useTimer } from "../providers/timer";
 import { useWorkspaceData } from "../providers/workspace-data";
+import { useWorkspaceUI } from "../providers/workspace-ui";
 import { ChoiceGroup } from "../ui/choice-group";
 import { useBlockConfig } from "./use-block-config";
 
@@ -14,7 +15,8 @@ import { useBlockConfig } from "./use-block-config";
 // A timer block has its own length, name, and link. Focus Mode shows the timer in use.
 export function FocusTimerBlock({ block, compact = false }: { block?: WorkspaceBlock; compact?: boolean }) {
   const timer = useTimer(block?.id);
-  const { preferences, updatePreferences } = useWorkspaceData();
+  const { preferences, updatePreferences, claimProgress } = useWorkspaceData();
+  const { focusTaskId } = useWorkspaceUI();
   const { session } = timer;
   const [confirming, setConfirming] = useState(false);
   const idle = session.runState === "idle";
@@ -26,9 +28,16 @@ export function FocusTimerBlock({ block, compact = false }: { block?: WorkspaceB
   const unsaved = block?.id.startsWith("new-") ?? false;
   const minutes = Math.round(timer.durationMs / 60_000);
 
+  // Starting a session on the selected task is what "started in Focus Mode" means.
+  // The database rewards it once per task, so restarting a timer earns nothing.
+  function startSession() {
+    timer.startNewSession();
+    if (compact && focusTaskId) claimProgress("focus_start", focusTaskId);
+  }
+
   function startNew() {
     if (unfinished) setConfirming(true);
-    else timer.startNewSession();
+    else startSession();
   }
 
   return (
@@ -55,7 +64,7 @@ export function FocusTimerBlock({ block, compact = false }: { block?: WorkspaceB
                 <Coffee size={16} aria-hidden="true" /> Start break
               </button>
             ) : null}
-            <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm" onClick={timer.startNewSession}>
+            <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm" onClick={startSession}>
               <Play size={16} aria-hidden="true" /> Start another session
             </button>
           </div>
@@ -72,7 +81,7 @@ export function FocusTimerBlock({ block, compact = false }: { block?: WorkspaceB
               className="mc-btn mc-btn-primary mc-btn-sm"
               onClick={() => {
                 setConfirming(false);
-                timer.startNewSession();
+                startSession();
               }}
             >
               Start new session

@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { HelpRequest } from "@/lib/schemas";
 
-export type SettingsSection = "profile" | "appearance" | "workspace" | "notifications" | "ai" | "account";
+export type SettingsSection = "profile" | "appearance" | "workspace" | "notifications" | "rewards" | "ai" | "account";
 export type AssistantMode = "chat" | "help_me_start" | "planning" | "missing_information";
 
 export interface AssistantRequest {

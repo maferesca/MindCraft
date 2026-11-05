@@ -5,6 +5,7 @@ import { DAILY_PHRASES, ENCOURAGEMENT_COOLDOWN_MS, SESSION_PHRASES, TASK_PHRASES
 import { isGroupMinimized } from "../blocks";
 import { joinGroup, keepGroupsTogether, leaveGroup, moveGroup, removeGroup, renameGroup, workGroups } from "../groups";
 import { DEFAULT_PREFERENCES, normalizePreferences } from "../preferences";
+import { earlyBonus, levelProgress, rewardFeedback } from "../xp";
 import type { AssistantContext } from "../schemas";
 import { fallbackTaskBlockId, taskBlockOptions, tasksForBlock } from "../task-helpers";
 import type { BlockType, Task, WorkspaceBlock } from "../types";
@@ -120,6 +121,48 @@ describe("work groups", () => {
   it("keeps a group's blocks together on a phone", () => {
     const ordered = [block("a", 0, 0, "notes", { group_id: "g" }), block("x", 0, 1), block("b", 0, 2, "notes", { group_id: "g" })];
     expect(keepGroupsTogether(ordered).map((item) => item.id)).toEqual(["a", "b", "x"]);
+  });
+});
+
+describe("MindCraft Journey", () => {
+  it("uses each level's own threshold for progress", () => {
+    expect(levelProgress(0)).toMatchObject({ current: { level: 1 }, next: { level: 2 }, percent: 0, toNext: 100 });
+    expect(levelProgress(99).current.level).toBe(1);
+    expect(levelProgress(100).current.name).toBe("Builder");
+    expect(levelProgress(165)).toMatchObject({ current: { level: 2 }, percent: 43, toNext: 85 });
+    expect(levelProgress(250).current.name).toBe("Creator");
+    expect(levelProgress(500).current.name).toBe("Architect");
+    expect(levelProgress(899).current.level).toBe(4);
+  });
+
+  it("keeps counting after the highest level", () => {
+    expect(levelProgress(900)).toMatchObject({ current: { level: 5, name: "Master Builder" }, next: null, percent: 100, toNext: 0 });
+    expect(levelProgress(5000).current.level).toBe(5);
+  });
+
+  it("calculates the early bonus with the same rules as the database", () => {
+    const hour = 3_600_000;
+    expect(earlyBonus(100 * hour, 0, 50 * hour)).toBe(15);
+    expect(earlyBonus(100 * hour, 0, 51 * hour)).toBe(10);
+    expect(earlyBonus(100 * hour, 0, 80 * hour)).toBe(10);
+    expect(earlyBonus(100 * hour, 0, 99 * hour)).toBe(5);
+    expect(earlyBonus(100 * hour, 0, 100 * hour)).toBe(0);
+    expect(earlyBonus(null, null, 0)).toBe(0);
+    expect(earlyBonus(0, 5 * hour, hour)).toBe(0);
+    expect(earlyBonus(hour / 2, 0, hour / 4)).toBe(0);
+    expect(earlyBonus(5 * hour, 0, hour)).toBe(5);
+    expect(earlyBonus(100 * hour, 0, 60_000)).toBe(0);
+  });
+
+  it("explains a completed task with its bonus and total", () => {
+    const { title, lines } = rewardFeedback([{ action: "early_bonus", amount: 15 }, { action: "task_complete", amount: 20 }]);
+    expect(title).toBe("Task completed!");
+    expect(lines).toEqual(["+20 XP — Task completion", "+15 XP — Finished ahead of schedule", "Total: +35 XP"]);
+  });
+
+  it("keeps rewards visible by default and off without losing other settings", () => {
+    expect(DEFAULT_PREFERENCES).toMatchObject({ rewardsEnabled: true, xpNotifications: true, levelUpMessages: true });
+    expect(normalizePreferences({ rewardsEnabled: false }).xpNotifications).toBe(true);
   });
 });
 
