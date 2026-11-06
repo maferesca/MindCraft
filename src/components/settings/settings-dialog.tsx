@@ -1,16 +1,18 @@
 "use client";
 
 import { Tabs } from "radix-ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BLOCK_DEFINITIONS, BLOCK_ORDER } from "@/lib/blocks";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { DEFAULT_PREFERENCES, type Preferences } from "@/lib/preferences";
+import { voicesFor } from "@/lib/speech";
 import type { BlockType, NotificationPreferences } from "@/lib/types";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI, type SettingsSection } from "../providers/workspace-ui";
 import { SelectField, TextField } from "../ui/field";
 import { Modal } from "../ui/modal";
 import { useNotify } from "../ui/notifications";
+import { ReadAloud } from "../ui/read-aloud";
 import { AppearanceFields, AppearancePreview, Segmented } from "./appearance-fields";
 import { WorkStyleFields } from "./work-style-fields";
 
@@ -321,6 +323,50 @@ function RewardsSection() {
   );
 }
 
+// Voices belong to each browser and load late, so the list follows that event.
+function ReadAloudVoice() {
+  const { preferences, updatePreferences } = useWorkspaceData();
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [listed, setListed] = useState(false);
+
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+    const load = () => {
+      const all = window.speechSynthesis.getVoices();
+      setVoices(voicesFor(all, "en"));
+      setListed(all.length > 0);
+    };
+    load();
+    window.speechSynthesis.addEventListener("voiceschanged", load);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
+  }, []);
+
+  if (!voices.length) {
+    return listed ? (
+      <p className="mc-hint">
+        This browser has no English voice, so Read aloud may sound wrong in English. Google Chrome includes English voices, or you can add one in your device&apos;s speech settings.
+      </p>
+    ) : null;
+  }
+  return (
+    <div className="flex items-end gap-2">
+      <div className="min-w-0 flex-1">
+        <SelectField label="Read aloud voice for English" value={preferences.speechVoice} onChange={(event) => updatePreferences({ speechVoice: event.target.value })}>
+          <option value="">Automatic (best available)</option>
+          {voices.map((voice) => (
+            <option key={voice.voiceURI} value={voice.voiceURI}>
+              {voice.name}
+            </option>
+          ))}
+        </SelectField>
+      </div>
+      <div className="pb-1">
+        <ReadAloud text="Start with one manageable step, then choose what comes next." label="Try this voice" />
+      </div>
+    </div>
+  );
+}
+
 function AiSection() {
   const { preferences, updatePreferences, clearChat, messages } = useWorkspaceData();
   const { announce } = useNotify();
@@ -346,6 +392,8 @@ function AiSection() {
         <option value="French">French</option>
         <option value="Portuguese">Portuguese</option>
       </SelectField>
+
+      <ReadAloudVoice />
 
       <div>
         <button

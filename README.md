@@ -210,7 +210,7 @@ The assistance level is stored as `planningStyle`, so earlier choices carry over
 
 **What's making it hard to start?** in Focus Mode offers five options that ask the existing assistant about the selected task, and the answer appears in the assistant panel. The server turns each option into a fixed instruction that responds only to what was selected and never guesses at a medical or emotional cause. The timer and break options never start by themselves. A short session does not change the saved session length.
 
-**Read aloud** uses the browser's own speech, so no audio or text leaves the device. It appears only where the browser supports it, and it never starts by itself.
+**Read aloud** uses the browser's own speech, so no audio or text leaves the device. It appears only where the browser supports it, and it never starts by itself. It picks the best voice for the text's language, preferring natural voices, so English is not read by a Spanish system voice. **Settings > AI and privacy** lets each person choose an English voice from those on their device.
 
 **Missing information** is a help request linked to the task, the same `check_ins` record that the Check-in block shows. Task guide and Focus Mode read it through one component, so both show the same entries, which can be edited, resolved, and reopened. Open entries are included with the selected task in assistant requests.
 

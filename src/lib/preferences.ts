@@ -66,6 +66,8 @@ export const preferencesSchema = z.object({
   planningStyle: z.enum(["one_step", "short_list", "full_overview"]),
   communicationStyle: z.enum(["supportive", "direct", "neutral"]),
   stepLayout: z.enum(["list", "visual"]),
+  // A voice from this browser. Empty means the best one for the text's language.
+  speechVoice: z.string().max(300),
   workspaceGuideSeen: z.boolean(),
   taskPresentation: z.enum(["not_set", "checklist", "short_text"]),
   focusTime: z.enum(["not_set", "morning", "afternoon", "evening", "varies"]),
@@ -104,6 +106,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   planningStyle: "short_list",
   communicationStyle: "supportive",
   stepLayout: "list",
+  speechVoice: "",
   workspaceGuideSeen: false,
   taskPresentation: "not_set",
   focusTime: "not_set",

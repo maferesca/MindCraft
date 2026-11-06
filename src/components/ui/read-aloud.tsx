@@ -2,18 +2,9 @@
 
 import { Square, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { chooseVoice, speechLanguage } from "@/lib/speech";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { IconButton } from "./icon-button";
-
-const LANGUAGE_CODES: Record<string, string> = {
-  English: "en",
-  Danish: "da",
-  Spanish: "es",
-  Italian: "it",
-  German: "de",
-  French: "fr",
-  Portuguese: "pt",
-};
 
 const noSubscription = () => () => {};
 const canSpeak = () => "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
@@ -27,12 +18,13 @@ export function ReadAloud({ text, label = "Read aloud" }: { text: string; label?
   // Chrome can drop an utterance that nothing references, and it would never finish.
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Browsers load voices on first request, so ask before the button is pressed.
+    if (canSpeak()) window.speechSynthesis.getVoices();
+    return () => {
       if (utteranceRef.current) window.speechSynthesis.cancel();
-    },
-    [],
-  );
+    };
+  }, []);
 
   if (!supported || !text.trim()) return null;
 
@@ -44,8 +36,10 @@ export function ReadAloud({ text, label = "Read aloud" }: { text: string; label?
       return;
     }
     const utterance = new SpeechSynthesisUtterance(text);
-    const language = LANGUAGE_CODES[preferences.language];
-    if (language) utterance.lang = language;
+    const language = speechLanguage(preferences.language, text);
+    const voice = chooseVoice(window.speechSynthesis.getVoices(), language, preferences.speechVoice);
+    utterance.lang = voice?.lang ?? language;
+    if (voice) utterance.voice = voice;
     const finished = () => {
       if (utteranceRef.current === utterance) utteranceRef.current = null;
       setSpeaking(false);

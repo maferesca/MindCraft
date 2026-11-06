@@ -5,6 +5,7 @@ import { DAILY_PHRASES, ENCOURAGEMENT_COOLDOWN_MS, SESSION_PHRASES, TASK_PHRASES
 import { isGroupMinimized } from "../blocks";
 import { joinGroup, keepGroupsTogether, leaveGroup, moveGroup, removeGroup, renameGroup, workGroups } from "../groups";
 import { DEFAULT_PREFERENCES, normalizePreferences } from "../preferences";
+import { chooseVoice, speechLanguage } from "../speech";
 import { earlyBonus, levelProgress, rewardFeedback } from "../xp";
 import type { AssistantContext } from "../schemas";
 import { fallbackTaskBlockId, taskBlockOptions, tasksForBlock } from "../task-helpers";
@@ -163,6 +164,30 @@ describe("MindCraft Journey", () => {
   it("keeps rewards visible by default and off without losing other settings", () => {
     expect(DEFAULT_PREFERENCES).toMatchObject({ rewardsEnabled: true, xpNotifications: true, levelUpMessages: true });
     expect(normalizePreferences({ rewardsEnabled: false }).xpNotifications).toBe(true);
+  });
+});
+
+describe("read aloud voice", () => {
+  const voice = (name: string, lang: string) => ({ name, lang, voiceURI: name });
+  const voices = [voice("Microsoft Sabina", "es-MX"), voice("Microsoft David", "en-US"), voice("Microsoft Zira", "en-US"), voice("Microsoft Aria Online (Natural)", "en-US"), voice("Google español", "es-ES")];
+
+  it("reads English with an English voice on a Spanish computer", () => {
+    expect(chooseVoice(voices, speechLanguage("auto", "Open the sheet and pick the quarter."), "")?.name).toBe("Microsoft Aria Online (Natural)");
+  });
+
+  it("reads Spanish with a Spanish voice", () => {
+    expect(chooseVoice(voices, speechLanguage("auto", "Abre la hoja de ventas para empezar"), "")?.lang).toMatch(/^es/);
+    expect(speechLanguage("Spanish", "Open the sheet")).toBe("es");
+  });
+
+  it("uses the chosen voice only for its own language", () => {
+    expect(chooseVoice(voices, "en", "Microsoft Zira")?.name).toBe("Microsoft Zira");
+    expect(chooseVoice(voices, "es", "Microsoft Zira")?.lang).toMatch(/^es/);
+  });
+
+  it("falls back when a chosen voice is not on this computer", () => {
+    expect(chooseVoice(voices, "en", "Gone")?.name).toBe("Microsoft Aria Online (Natural)");
+    expect(chooseVoice([], "en", "")).toBeNull();
   });
 });
 
