@@ -348,7 +348,12 @@ Following WCAG 2.2 AA practices is a goal, not a certification.
 
 MindCraft is built by **Tec it Easy** for the North America AI Challenge.
 
-**Members and roles:** to be completed by the team before submission.
+**Members:**
+
+- Alan Sebastian Terrazas Camacho
+- Leonardo Andre Ramirez Gonzalez
+- Emiliano Bustamante Camacho
+- Maria Fernanda Escamilla Najera
 
 ## AI assistance disclosure
 
