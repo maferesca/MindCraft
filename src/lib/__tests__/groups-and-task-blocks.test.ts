@@ -3,7 +3,7 @@ import { buildContextText } from "../ai/assistant-prompt";
 import { NO_INVENTED_FIGURES_REPLY, NO_PLAN_REPLY, sanitizeProposals, withoutEmptyPromise, withoutInventedFigures } from "../ai/proposal-guard";
 import { DAILY_PHRASES, ENCOURAGEMENT_COOLDOWN_MS, SESSION_PHRASES, TASK_PHRASES, createEncouragementPicker, dailyPhrase } from "../encouragement";
 import { isGroupMinimized } from "../blocks";
-import { joinGroup, keepGroupsTogether, leaveGroup, moveGroup, removeGroup, renameGroup, workGroups } from "../groups";
+import { joinGroup, keepGroupsTogether, movePhonePlace, leaveGroup, moveGroup, removeGroup, renameGroup, workGroups } from "../groups";
 import { DEFAULT_PREFERENCES, normalizePreferences } from "../preferences";
 import { chooseVoice, speechLanguage } from "../speech";
 import { STREAK_STAGES, streakStage } from "../streak";
@@ -113,6 +113,15 @@ describe("work groups", () => {
     expect(workGroups(removed)).toEqual([]);
     expect(removed.map((item) => item.layouts.lg)).toEqual(grouped.map((item) => item.layouts.lg));
     expect(removed).toHaveLength(3);
+  });
+
+  it("moves a whole group on a phone and passes over a group as one place", () => {
+    const phone = [block("x", 0, 0), block("a", 0, 1, "notes", { group_id: "g" }), block("b", 0, 2, "notes", { group_id: "g" }), block("y", 0, 3)];
+    const order = (items: WorkspaceBlock[]) => keepGroupsTogether([...items].sort((p, q) => p.mobile_order - q.mobile_order)).map((item) => item.id);
+    expect(order(movePhonePlace(phone, "a", -1))).toEqual(["a", "b", "x", "y"]);
+    expect(order(movePhonePlace(phone, "b", 1))).toEqual(["x", "y", "a", "b"]);
+    expect(order(movePhonePlace(phone, "x", 1))).toEqual(["a", "b", "x", "y"]);
+    expect(movePhonePlace(phone, "x", -1)).toBe(phone);
   });
 
   it("minimizes as a group only while the block is in one", () => {

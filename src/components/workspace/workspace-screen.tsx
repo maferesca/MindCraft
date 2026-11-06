@@ -10,7 +10,7 @@ import { AppProviders } from "../providers/app-providers";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
 import { SettingsDialog } from "../settings/settings-dialog";
-import { AppHeader } from "../shell/app-header";
+import { AppHeader, HeaderStatus } from "../shell/app-header";
 import { OfflineBanner } from "../shell/offline-banner";
 import { ReminderBanner } from "../shell/reminder-banner";
 import { MissingInfoDialog } from "../blocks/check-in-form";
@@ -43,6 +43,9 @@ function WorkspaceLayout() {
       <OfflineBanner />
       <AppHeader />
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[1400px] px-4 pb-28 pt-5 outline-none">
+        <div className="mb-3 flex flex-wrap justify-center gap-2 sm:hidden">
+          <HeaderStatus />
+        </div>
         {focusMode ? (
           <FocusMode />
         ) : (

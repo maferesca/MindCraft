@@ -23,20 +23,24 @@ interface InventoryPanelProps {
 // through. Escape closes it; the toolbar then takes focus back.
 export function InventoryPanel({ hiddenBlocks, dragging, onAdd, onRestore, onDragTypeChange, onClose }: InventoryPanelProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
 
+  // The panel itself takes focus, because a focused button would show its tooltip.
   useEffect(() => {
-    closeRef.current?.focus();
+    panelRef.current?.focus();
   }, []);
 
   return (
     <section
+      ref={panelRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="false"
       aria-labelledby="inventory-title"
       onKeyDown={(event) => {
         if (event.key === "Escape") onClose();
       }}
-      className={`fixed inset-x-2 bottom-[4.75rem] z-40 mx-auto flex max-h-[calc(100dvh-var(--header-height)-6rem)] max-w-5xl flex-col rounded-2xl border border-border-strong bg-surface shadow-2xl transition-opacity ${
+      className={`fixed inset-x-2 bottom-[4.75rem] z-40 mx-auto flex outline-none max-h-[calc(100dvh-var(--header-height)-6rem)] max-w-5xl flex-col rounded-2xl border border-border-strong bg-surface shadow-2xl transition-opacity ${
         dragging ? "pointer-events-none opacity-25" : ""
       }`}
     >

@@ -153,7 +153,7 @@ function TaskBoard({ tasks, today }: { tasks: Task[]; today: string }) {
   const [over, setOver] = useState<TaskStatus | null>(null);
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-3 gap-2 overflow-auto">
+    <div className="grid min-h-0 flex-1 gap-2 overflow-auto sm:grid-cols-3">
       {COLUMNS.map((status) => {
         const columnTasks = tasks.filter((task) => task.status === status);
         return (

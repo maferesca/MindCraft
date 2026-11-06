@@ -4,7 +4,7 @@ import { CircleHelp, Redo2, Save, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useContainerWidth, type Layout } from "react-grid-layout";
 import { BLOCK_DEFINITIONS, breakpointForWidth } from "@/lib/blocks";
-import { joinGroup, leaveGroup, moveGroup, removeGroup, renameGroup, workGroups } from "@/lib/groups";
+import { joinGroup, leaveGroup, moveGroup, movePhonePlace, removeGroup, renameGroup, workGroups } from "@/lib/groups";
 import { addBlockToDraft, applyGridLayout, moveInOrder, nudgeBlock, resizeBlock, withPositions } from "@/lib/layout-edit";
 import type { BlockType, WorkspaceBlock } from "@/lib/types";
 import { useWorkspaceData } from "../providers/workspace-data";
@@ -97,6 +97,10 @@ export function WorkspaceView() {
           commit(removeGroup(draft, groupId));
           announce("Group removed. Its blocks and their content are unchanged.");
         },
+        movePlace: (groupId: string, direction: -1 | 1) => {
+          const member = draft.find((block) => block.group_id === groupId);
+          if (member) commit(movePhonePlace(draft, member.id, direction));
+        },
       }
     : null;
 
@@ -120,11 +124,11 @@ export function WorkspaceView() {
       isFirst: index === 0,
       isLast: index === total - 1,
       moveEarlier: () => {
-        commit(moveInOrder(draft, block.id, -1, breakpoint));
+        commit(breakpoint === "sm" && !block.group_id ? movePhonePlace(draft, block.id, -1) : moveInOrder(draft, block.id, -1, breakpoint));
         announce(`${label} moved earlier.`);
       },
       moveLater: () => {
-        commit(moveInOrder(draft, block.id, 1, breakpoint));
+        commit(breakpoint === "sm" && !block.group_id ? movePhonePlace(draft, block.id, 1) : moveInOrder(draft, block.id, 1, breakpoint));
         announce(`${label} moved later.`);
       },
       resize: (preset) => {
@@ -195,23 +199,24 @@ export function WorkspaceView() {
     <div className={creativeMode ? "pb-36" : ""}>
       {creativeMode ? (
         <div className="sticky top-[var(--header-height)] z-30 mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface px-3 py-2 shadow-sm">
-          <p className="mr-auto font-semibold">
+          {/* Icons only on phones, so this bar stays one line and keeps the blocks in view. */}
+          <p className="mr-auto font-semibold max-sm:hidden">
             Creative Mode
           </p>
-          <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={() => setGuideStep(1)}>
-            <CircleHelp size={16} aria-hidden="true" /> Guide
+          <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm max-sm:min-w-11 max-sm:px-2" onClick={() => setGuideStep(1)}>
+            <CircleHelp size={16} aria-hidden="true" /> <span className="max-sm:sr-only">Guide</span>
           </button>
-          <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={undo} disabled={!history?.past.length}>
-            <Undo2 size={16} aria-hidden="true" /> Undo
+          <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm max-sm:min-w-11 max-sm:px-2" onClick={undo} disabled={!history?.past.length}>
+            <Undo2 size={16} aria-hidden="true" /> <span className="max-sm:sr-only">Undo</span>
           </button>
-          <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={redo} disabled={!history?.future.length}>
-            <Redo2 size={16} aria-hidden="true" /> Redo
+          <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm max-sm:min-w-11 max-sm:px-2" onClick={redo} disabled={!history?.future.length}>
+            <Redo2 size={16} aria-hidden="true" /> <span className="max-sm:sr-only">Redo</span>
           </button>
-          <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm" onClick={handleCancel}>
-            <X size={16} aria-hidden="true" /> Cancel
+          <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm max-sm:min-w-11 max-sm:px-2" onClick={handleCancel}>
+            <X size={16} aria-hidden="true" /> <span className="max-sm:sr-only">Cancel</span>
           </button>
-          <button type="button" className="mc-btn mc-btn-primary mc-btn-sm" onClick={handleSave} disabled={saving}>
-            <Save size={16} aria-hidden="true" /> {saving ? "Saving…" : "Save layout"}
+          <button type="button" className="mc-btn mc-btn-primary mc-btn-sm max-sm:ml-auto" onClick={handleSave} disabled={saving}>
+            <Save size={16} aria-hidden="true" /> {saving ? "Saving…" : <span>Save<span className="max-sm:hidden"> layout</span></span>}
           </button>
         </div>
       ) : null}

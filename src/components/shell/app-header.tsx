@@ -66,15 +66,16 @@ export function AppHeader() {
           <span className="hidden sm:inline-flex">
             <Wordmark className="text-xl" markSize={36} />
           </span>
-          <span className="sm:hidden">
+          <span className="hidden min-[26rem]:inline-flex sm:hidden">
             <BrandMark size={34} />
           </span>
           <span className="hidden text-text-muted sm:inline" aria-hidden="true">
             /
           </span>
           <h1 className="truncate font-semibold">{workspace?.name ?? "My workspace"}</h1>
-          <StreakIndicator />
-          <ProgressIndicator />
+          <div className="flex items-center max-sm:hidden">
+            <HeaderStatus />
+          </div>
         </div>
 
         <nav aria-label="Modes" className="ml-auto flex items-center gap-1">
@@ -113,6 +114,16 @@ function HeaderButton({ label, icon, onClick, pressed }: { label: string; icon: 
   );
 }
 
+// Streak and level. A phone header has no room for them, so they sit above the content there.
+export function HeaderStatus() {
+  return (
+    <>
+      <StreakIndicator />
+      <ProgressIndicator />
+    </>
+  );
+}
+
 function StreakIndicator() {
   const { streak, preferences, updatePreferences } = useWorkspaceData();
   if (!preferences.showStreak || !streak || streak.current_streak < 1) return null;
@@ -124,8 +135,7 @@ function StreakIndicator() {
     <Popover.Root>
       <Popover.Trigger className="mc-chip ml-1 shrink-0 cursor-pointer bg-surface" aria-label={`Visit streak: ${streak.current_streak} ${streak.current_streak === 1 ? "day" : "days"}. Show details`}>
         <Flame size={14} aria-hidden="true" fill="currentColor" className="shrink-0" style={{ color: colorOf(stage) }} />
-        <span className="max-sm:sr-only">{streak.current_streak} day{streak.current_streak === 1 ? "" : "s"}</span>
-        <span className="sm:hidden">{streak.current_streak}</span>
+        <span>{streak.current_streak} day{streak.current_streak === 1 ? "" : "s"}</span>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content className="mc-menu max-w-xs p-3" sideOffset={6}>

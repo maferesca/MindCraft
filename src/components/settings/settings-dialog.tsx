@@ -32,12 +32,12 @@ export function SettingsDialog() {
   return (
     <Modal open={settings !== null} onOpenChange={(open) => !open && closeSettings()} title="Settings" wide>
       <Tabs.Root value={settings ?? "appearance"} onValueChange={(value) => openSettings(value as SettingsSection)}>
-        <Tabs.List aria-label="Settings sections" className="-mx-1 mb-5 flex gap-1 overflow-x-auto border-b border-border px-1 pb-2">
+        <Tabs.List aria-label="Settings sections" className="-mx-1 mb-5 grid grid-cols-2 gap-1 border-b border-border px-1 pb-2 sm:flex sm:overflow-x-auto sm:[scrollbar-width:none]">
           {SECTIONS.map(([value, label]) => (
             <Tabs.Trigger
               key={value}
               value={value}
-              className="shrink-0 rounded-lg px-3 py-2 font-semibold text-text-muted data-[state=active]:bg-primary-soft data-[state=active]:text-text data-[state=active]:underline data-[state=active]:underline-offset-4"
+              className="shrink-0 rounded-lg px-3 py-2 text-left font-semibold text-text-muted max-sm:text-sm data-[state=active]:bg-primary-soft data-[state=active]:text-text data-[state=active]:underline data-[state=active]:underline-offset-4"
             >
               {label}
             </Tabs.Trigger>

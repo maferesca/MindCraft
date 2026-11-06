@@ -160,7 +160,7 @@ A group is the set of blocks that share a `group_id`, and `group_title` holds it
 - **Stillness:** other blocks stay still during a drag, so a target never moves away from the pointer. They make room when the block is dropped.
 - **Title bar:** a one-row grid item computed from the group's blocks, which is why it can be dragged. Moving it shifts every block by the same amount.
 - **Minimize:** the title bar minimizes the whole group to a named chip in the tray above the workspace, saved like a block's minimize. A separate `groupMinimized` flag means restoring the group does not reopen a block that was minimized on its own. Timers in a minimized group keep running.
-- **Menus:** the block's three-dot menu offers Add to group and Remove from group, and the group's menu offers Remove group, keep blocks. These work on phones, where nothing is dragged.
+- **Menus:** the block's three-dot menu offers Add to group and Remove from group, and the group's menu offers Remove group, keep blocks. These work on phones, where nothing is dragged and arrows on the title bar move the whole group.
 
 The shared background is drawn per block, so it never covers a block outside the group. Grouping never changes a block's content or its tasks.
 

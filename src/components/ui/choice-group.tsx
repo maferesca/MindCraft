@@ -16,14 +16,14 @@ export function ChoiceGroup<T extends string>({
   disabled?: boolean;
 }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex rounded-lg border border-border-strong p-0.5">
+    <div role="group" aria-label={label} className="inline-flex flex-wrap rounded-lg border border-border-strong p-0.5">
       {options.map(([option, text]) => (
         <button
           key={option}
           type="button"
           aria-pressed={value === option}
           disabled={disabled}
-          className={`rounded-md px-2.5 py-1 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55 ${value === option ? "bg-primary text-on-primary" : ""}`}
+          className={`mc-choice rounded-md px-2.5 py-1 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-55 ${value === option ? "bg-primary text-on-primary" : ""}`}
           onClick={() => onChange(option)}
         >
           {text}

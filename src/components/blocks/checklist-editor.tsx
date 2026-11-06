@@ -48,7 +48,7 @@ export function ChecklistEditor({ items, noun, onAdd, onChange, onDelete }: Chec
       {items.length ? (
         <ol className="flex flex-col gap-1">
           {items.map((item, index) => (
-            <li key={item.id} className="flex items-center gap-1">
+            <li key={item.id} className="flex flex-wrap items-center gap-1 sm:flex-nowrap">
               <input
                 type="checkbox"
                 className="h-5 w-5 shrink-0 accent-[var(--mc-primary)]"
@@ -61,7 +61,7 @@ export function ChecklistEditor({ items, noun, onAdd, onChange, onDelete }: Chec
                 autoFocus={refocusId === item.id}
                 data-local-escape
                 aria-label={`${noun} ${index + 1} text`}
-                className={`mc-input min-h-9 min-w-0 flex-1 py-1 ${item.done ? "text-text-muted line-through" : ""}`}
+                className={`mc-input min-h-9 min-w-0 flex-1 py-1 max-sm:basis-[calc(100%-2rem)] ${item.done ? "text-text-muted line-through" : ""}`}
                 defaultValue={item.text}
                 maxLength={500}
                 onBlur={(event) => {
@@ -84,6 +84,8 @@ export function ChecklistEditor({ items, noun, onAdd, onChange, onDelete }: Chec
                   if (event.key === "Escape") event.currentTarget.value = item.text;
                 }}
               />
+              {/* On a phone the controls take their own line, so the text keeps the full width. */}
+              <span className="ml-auto" aria-hidden="true" />
               <IconButton
                 size="sm"
                 label={`Move ${noun} ${index + 1} up`}

@@ -52,7 +52,7 @@ export function BlockFrame({ block, breakpoint, creative, maximized = false, onT
       className={`mc-card flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden ${creative ? "outline-2 outline-dashed outline-offset-2 outline-border-strong" : ""}`}
     >
       <header
-        className={`flex items-center gap-2 border-b border-border px-3 py-1.5 ${creative ? "bg-surface-muted" : ""}`}
+        className={`flex flex-wrap items-center gap-x-2 border-b border-border px-3 py-1.5 ${creative ? "bg-surface-muted" : ""}`}
         style={creative ? undefined : { background: blockHeaderBackground(block.block_type) }}
       >
         {creative && breakpoint !== "sm" ? (
@@ -65,11 +65,12 @@ export function BlockFrame({ block, breakpoint, creative, maximized = false, onT
           </span>
         ) : null}
         <BlockIcon type={block.block_type} size={18} />
-        <h3 id={headingId} className={`min-w-0 flex-1 truncate font-bold ${creative && breakpoint !== "sm" ? "mc-drag-handle cursor-grab" : ""}`}>
+        {/* Keeps room to read the title. If the buttons don't fit beside it, they move to their own line. */}
+        <h3 id={headingId} className={`min-w-24 flex-1 truncate font-bold ${creative && breakpoint !== "sm" ? "mc-drag-handle cursor-grab" : ""}`}>
           {title}
         </h3>
         {creative ? <CreativeControls block={block} breakpoint={breakpoint} actions={creative} title={title} /> : null}
-        <div className="flex items-center gap-0.5">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-0.5">
           {block.block_type === "task_list" || block.block_type === "focus_timer" ? <BlockDetails block={block} /> : null}
           {/* Creative Mode needs the room for a readable title; the inventory explains each block. */}
           {creative ? null : <BlockInfo type={block.block_type} />}

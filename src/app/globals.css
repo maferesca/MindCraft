@@ -366,3 +366,38 @@ html[data-motion="on"] *::after {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Phones and touch screens: every control fits a finger. Outside any layer, so these
+   win over the compact sizes that utility classes set for desktop. */
+@media (max-width: 39.99rem), (pointer: coarse) {
+  .mc-input {
+    min-height: 2.75rem;
+    /* Smaller text makes iPhones zoom the page when a field gets focus. */
+    font-size: max(1rem, 16px);
+  }
+  .mc-btn-sm {
+    min-height: 2.75rem;
+  }
+  .mc-icon-btn-sm {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+  .mc-choice {
+    min-height: 2.5rem;
+  }
+  button.mc-chip {
+    min-height: 2.25rem;
+    padding-inline: 0.625rem;
+  }
+  summary {
+    padding-block: 0.5rem;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  input[type="range"] {
+    min-height: 2.75rem;
+  }
+}

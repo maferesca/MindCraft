@@ -160,7 +160,7 @@ export function WorkspaceGrid({ blocks, width, breakpoint, creative, draggingTyp
                   <GroupHeader group={group} actions={groupActions} draggable={false} />
                 </li>
               ) : null}
-              <li style={{ minHeight: Math.min(560, Math.max(300, (block.layouts.lg?.h ?? 6) * 52)) }} className={`flex ${block.group_id ? "border-l-4 border-primary-soft pl-2" : ""}`}>
+              <li className={`flex ${block.group_id ? "border-l-4 border-primary-soft pl-2" : ""}`}>
                 <div className="flex w-full">
                   <BlockFrame block={block} breakpoint="sm" creative={actionsFor(block, index, ordered.length)} onToggleMaximize={toggleMaximize && (() => toggleMaximize(block.id))}>
                     <BlockContent block={block} />

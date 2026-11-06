@@ -29,6 +29,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // The on-screen keyboard shrinks the page, so the assistant's input stays visible.
+  interactiveWidget: "resizes-content",
   themeColor: "#F8F3EC",
   width: "device-width",
   initialScale: 1,

@@ -1,7 +1,7 @@
 "use client";
 
 import { DropdownMenu } from "radix-ui";
-import { GripVertical, Minus, MoreHorizontal, Sparkles, Unlink } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Minus, MoreHorizontal, Sparkles, Unlink } from "lucide-react";
 import type { WorkGroup } from "@/lib/groups";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
@@ -11,6 +11,8 @@ import { focusAfterRender } from "./block-frame";
 export interface GroupActions {
   rename: (groupId: string, title: string) => void;
   remove: (groupId: string) => void;
+  // Phones have no dragging, so a group moves with buttons there.
+  movePlace: (groupId: string, direction: -1 | 1) => void;
 }
 
 interface GroupHeaderProps {
@@ -61,6 +63,12 @@ export function GroupHeader({ group, actions, draggable }: GroupHeaderProps) {
       ) : (
         <h3 className="min-w-0 flex-1 truncate font-bold">{group.title}</h3>
       )}
+      {actions && !draggable ? (
+        <>
+          <IconButton size="sm" className="shrink-0" label={`Move group ${group.title} earlier`} icon={<ChevronUp size={18} />} onClick={() => actions.movePlace(group.id, -1)} />
+          <IconButton size="sm" className="shrink-0" label={`Move group ${group.title} later`} icon={<ChevronDown size={18} />} onClick={() => actions.movePlace(group.id, 1)} />
+        </>
+      ) : null}
       {actions ? (
         <DropdownMenu.Root>
           <DropdownMenu.Trigger className="mc-icon-btn mc-icon-btn-sm shrink-0" aria-label={`Options for group ${group.title}`} title="Group options">

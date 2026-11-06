@@ -2,7 +2,7 @@
 // edits, so Undo, Redo, Cancel, and Save work without extra code. A group is the
 // set of blocks that carry the same group_id. Nothing here touches block content.
 
-import { GRID_COLUMNS, isGroupMinimized, isMinimized } from "./blocks";
+import { GRID_COLUMNS, isGroupMinimized, isMinimized, sortForPhone } from "./blocks";
 import { withPositions } from "./layout-edit";
 import type { Breakpoint, GridPosition, WorkspaceBlock } from "./types";
 
@@ -102,6 +102,23 @@ export function moveGroup(blocks: WorkspaceBlock[], groupId: string, dx: number,
     return { ...block, layouts: { ...block.layouts, [breakpoint]: { ...position, x: position.x + shiftX, y: position.y + shiftY } } };
   });
   return clearSpace(moved, new Set(members.map((block) => block.id)), breakpoint);
+}
+
+// Moves a whole group, or a block outside any group, past its neighbor on a phone.
+// A neighboring group counts as one place, so nothing lands inside it.
+export function movePhonePlace(blocks: WorkspaceBlock[], id: string, direction: -1 | 1): WorkspaceBlock[] {
+  const ordered = keepGroupsTogether(sortForPhone(blocks.filter(inGrid)));
+  const places: WorkspaceBlock[][] = [];
+  for (const block of ordered) {
+    const last = places[places.length - 1];
+    if (block.group_id && last?.[0].group_id === block.group_id) last.push(block);
+    else places.push([block]);
+  }
+  const index = places.findIndex((place) => place.some((block) => block.id === id));
+  if (index < 0 || !places[index + direction]) return blocks;
+  [places[index], places[index + direction]] = [places[index + direction], places[index]];
+  const order = new Map(places.flat().map((block, position) => [block.id, position + 1]));
+  return blocks.map((block) => (order.has(block.id) ? { ...block, mobile_order: order.get(block.id)! } : block));
 }
 
 // On a phone the list keeps each group's blocks together, at its first member's place.

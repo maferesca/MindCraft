@@ -19,10 +19,9 @@ export function ProgressIndicator() {
     <Popover.Root>
       <Popover.Trigger className="mc-chip ml-1 shrink-0 cursor-pointer bg-surface" aria-label={`Level ${current.level}, ${totalXp} XP. Show progress`}>
         <Star size={14} aria-hidden="true" className="shrink-0 text-primary" fill="currentColor" />
-        <span className="max-sm:hidden">
+        <span>
           Level {current.level} · {totalXp} XP
         </span>
-        <span className="sm:hidden">{current.level}</span>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content className="mc-menu w-80 max-w-[calc(100vw-2rem)] p-4" sideOffset={6} collisionPadding={8}>

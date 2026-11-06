@@ -54,10 +54,11 @@ export function AssistantButton() {
       onClick={() => (assistantOpen ? closeAssistant() : openAssistant())}
       aria-expanded={assistantOpen}
       aria-controls="assistant-panel"
-      className={`mc-btn mc-btn-primary fixed bottom-4 right-4 z-40 h-14 rounded-full px-5 shadow-lg sm:bottom-6 sm:right-6 ${assistantOpen ? "max-lg:hidden" : ""}`}
+      className={`mc-btn mc-btn-primary fixed bottom-4 right-4 z-40 h-14 rounded-full px-5 shadow-lg max-sm:w-14 max-sm:px-0 sm:bottom-6 sm:right-6 ${assistantOpen ? "max-lg:hidden" : ""}`}
     >
       <MessageCircle size={20} aria-hidden="true" />
-      <span>Assistant</span>
+      {/* An icon alone on phones, so the button doesn't cover what's beneath it. */}
+      <span className="max-sm:sr-only">Assistant</span>
     </button>
   );
 }

@@ -65,7 +65,17 @@ export function CurrentStep({ task, onAllDone, inTaskGuide = false }: { task: Ta
       ) : null}
 
       {editing || !taskSteps.length ? (
-        <ChecklistEditor items={taskSteps} noun="step" onAdd={(text) => addStep(task.id, text)} onChange={updateStep} onDelete={deleteStep} />
+        <ChecklistEditor
+          items={taskSteps}
+          noun="step"
+          onAdd={(text) => {
+            // The first step would otherwise close the editor, stopping the next one.
+            setEditing(true);
+            addStep(task.id, text);
+          }}
+          onChange={updateStep}
+          onDelete={deleteStep}
+        />
       ) : (
         <>
           <StepFlow steps={shown} allSteps={taskSteps} currentId={step?.id ?? null} layout={preferences.stepLayout} />

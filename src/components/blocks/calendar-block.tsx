@@ -16,6 +16,7 @@ import { IconButton } from "../ui/icon-button";
 import { Modal } from "../ui/modal";
 import { useNotify } from "../ui/notifications";
 import { useBlockConfig } from "./use-block-config";
+import { useIsPhone } from "./use-is-phone";
 import { useTimezone, useToday } from "./use-today";
 
 const HOUR_HEIGHT = 40;
@@ -33,9 +34,11 @@ export function CalendarBlock({ block }: { block: WorkspaceBlock }) {
   const { openTaskEditor } = useWorkspaceUI();
   const today = useToday();
   const timezone = useTimezone();
+  const phone = useIsPhone();
   const [config, setConfig] = useBlockConfig(block, {
     view: "calendar" as "calendar" | "agenda",
-    scale: "week" as CalendarScale,
+    // Seven columns don't fit on a phone. A choice the person saves always wins.
+    scale: (phone ? "day" : "week") as CalendarScale,
     firstDay: 1 as 0 | 1,
     showWeekends: true,
     projectId: "",
@@ -254,7 +257,7 @@ function TimeGrid({ dates, items, today, onOpen }: { dates: string[]; items: Cal
   }, []);
 
   return (
-    <div ref={scrollRef} className="min-h-40 flex-1 overflow-auto rounded-md border border-border">
+    <div ref={scrollRef} className="min-h-40 flex-1 overflow-auto rounded-md border border-border max-sm:max-h-[60dvh]">
       <div className="sticky top-0 z-[2] min-w-fit bg-surface">
         <div className="grid border-b border-border" style={{ gridTemplateColumns: template }}>
           <span />
