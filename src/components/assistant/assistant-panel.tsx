@@ -1,13 +1,18 @@
 "use client";
 
 import { DropdownMenu } from "radix-ui";
-import { Loader2, MessageCircle, MoreHorizontal, RotateCcw, Send, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Loader2, MessageCircle, MoreHorizontal, Plus, RotateCcw, Send, X } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { askAssistant } from "@/lib/ai/client";
-import { proposalSchema, type Proposal } from "@/lib/schemas";
+import { proposalSchema, type HelpRequest, type Proposal } from "@/lib/schemas";
+import { workGroups } from "@/lib/groups";
+import { findNamedTask } from "@/lib/task-plan";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI, type AssistantMode } from "../providers/workspace-ui";
 import { IconButton } from "../ui/icon-button";
+import { ReadAloud } from "../ui/read-aloud";
+import { restoreFocus } from "../ui/restore-focus";
+import { AiErrorNotice } from "./ai-error-notice";
 import { ProposalCard } from "./proposal-card";
 import { useAssistantContext } from "./use-assistant-context";
 import { useLocalDraft } from "./use-local-draft";
@@ -20,6 +25,23 @@ function proposalsFrom(value: unknown): Proposal[] {
     const parsed = proposalSchema.safeParse(item);
     return parsed.success ? [parsed.data] : [];
   });
+}
+
+// Below the lg breakpoint the panel covers the screen, so the page behind it
+// must not receive focus. On wider screens it sits beside the workspace.
+function keepTabInFullScreenPanel(event: KeyboardEvent<HTMLElement>) {
+  if (!window.matchMedia("(max-width: 63.99rem)").matches) return;
+  const focusable = [...event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), textarea, input, a[href]")];
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (!first || !last) return;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 export function AssistantButton() {
@@ -43,12 +65,13 @@ export function AssistantButton() {
 // One contextual assistant shared by chat, Daily Planning, Help me start,
 // and Missing information, with a single saved conversation.
 export function AssistantPanel() {
-  const { messages, tasks, appendMessage, clearChat } = useWorkspaceData();
-  const { assistantOpen, assistantRequest, consumeAssistantRequest, closeAssistant, openSettings } = useWorkspaceUI();
+  const { messages, profile, tasks, blocks, appendMessage, clearChat } = useWorkspaceData();
+  const { assistantOpen, assistantRequest, consumeAssistantRequest, closeAssistant, openMissingInfo, openSettings, openTaskEditor } = useWorkspaceUI();
   const buildContext = useAssistantContext();
   const [input, setInput] = useLocalDraft("assistant");
   const [mode, setMode] = useState<AssistantMode>("chat");
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [groupId, setGroupId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const sendingRef = useRef(false);
   // Retain a received answer if saving fails, so retry saves it without making
@@ -61,14 +84,18 @@ export function AssistantPanel() {
     proposal: unknown;
     userSaved: boolean;
   } | null>(null);
-  const [error, setError] = useState<{ message: string; text: string } | null>(null);
+  const [error, setError] = useState<{ code: string; message: string; text: string; helpRequest?: HelpRequest } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const task = taskId ? tasks.find((item) => item.id === taskId) : null;
+  const name = profile?.display_name?.trim();
+  const group = groupId ? (workGroups(blocks).find((item) => item.id === groupId) ?? null) : null;
 
-  async function send(text: string, sendMode: AssistantMode = mode, sendTaskId: string | null = taskId) {
+  async function send(text: string, sendMode: AssistantMode = mode, sendTaskId: string | null = taskId, requested?: HelpRequest) {
     const content = text.trim();
     if (!content || sendingRef.current) return;
+    // Sending the kept text again is the same request, even without pressing Retry.
+    const helpRequest = requested ?? (error?.text === content ? error.helpRequest : undefined);
     sendingRef.current = true;
     setPending(true);
     setError(null);
@@ -77,9 +104,10 @@ export function AssistantPanel() {
       let exchange = unsavedReplyRef.current;
       if (!exchange || exchange.text !== content || exchange.mode !== sendMode || exchange.taskId !== sendTaskId) {
         const history = messages.slice(-10).map((message) => ({ role: message.role, content: message.content }));
-        const result = await askAssistant([...history, { role: "user", content }], buildContext(sendMode, sendTaskId, [content]));
+        const contextTaskId = sendTaskId ?? findNamedTask(content, tasks)?.id ?? null;
+        const result = await askAssistant([...history, { role: "user", content }], buildContext(sendMode, contextTaskId, [content], helpRequest, group?.id));
         if (!result.ok) {
-          setError({ message: result.message, text: content });
+          setError({ code: result.code, message: result.message, text: content, helpRequest });
           setInput((current) => current || content);
           return;
         }
@@ -106,10 +134,10 @@ export function AssistantPanel() {
     } catch {
       setInput((current) => current || content);
       setError({
-        message: savingReply
-          ? "The assistant replied, but the conversation could not be saved. Try again to save it."
-          : "The assistant could not answer. Please try again.",
+        code: savingReply ? "not_saved" : "error",
+        message: "The assistant replied, but the conversation could not be saved. Try again to save it.",
         text: content,
+        helpRequest,
       });
     } finally {
       sendingRef.current = false;
@@ -125,16 +153,20 @@ export function AssistantPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMode(request.mode);
     setTaskId(request.taskId ?? null);
+    setGroupId(request.groupId ?? null);
     const requestTask = request.taskId ? tasks.find((item) => item.id === request.taskId) : null;
     const message =
       request.message ?? (request.mode === "help_me_start" && requestTask ? `Help me start "${requestTask.title}".` : "");
-    if (request.autoSend && message) send(message, request.mode, request.taskId ?? null);
+    if (request.autoSend && message) send(message, request.mode, request.taskId ?? null, request.helpRequest);
     else if (message) setInput(message);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assistantOpen, assistantRequest]);
 
   useEffect(() => {
-    if (assistantOpen) inputRef.current?.focus();
+    if (!assistantOpen) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    inputRef.current?.focus();
+    return () => restoreFocus(opener);
   }, [assistantOpen]);
 
   useEffect(() => {
@@ -154,7 +186,9 @@ export function AssistantPanel() {
       aria-label="Assistant"
       className="fixed inset-0 z-50 flex flex-col bg-surface lg:inset-auto lg:bottom-4 lg:right-4 lg:top-[calc(var(--header-height)+0.5rem)] lg:w-[26rem] lg:rounded-2xl lg:border lg:border-border lg:shadow-2xl"
       onKeyDown={(event) => {
-        if (event.key === "Escape") closeAssistant();
+        // Portaled menus bubble here through React, but Escape belongs to them.
+        if (event.key === "Escape" && event.currentTarget.contains(event.target as Node)) closeAssistant();
+        if (event.key === "Tab") keepTabInFullScreenPanel(event);
       }}
     >
       <header className="flex items-center gap-2 border-b border-border px-4 py-2">
@@ -205,9 +239,21 @@ export function AssistantPanel() {
         </div>
       ) : null}
 
+      {group ? (
+        <div className="flex items-center gap-2 border-b border-border bg-surface-muted px-4 py-2 text-sm">
+          <span className="min-w-0 flex-1">
+            Using group: <span className="font-semibold">{group.title}</span>
+            <span className="mc-hint block">Its tasks and the notes linked to them are sent with your messages.</span>
+          </span>
+          <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={() => setGroupId(null)}>
+            Clear
+          </button>
+        </div>
+      ) : null}
+
       <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-3" aria-live="polite" aria-relevant="additions">
         {messages.length === 0 && !pending ? (
-          <p className="mc-hint">Ask for help planning or getting started.</p>
+          <p className="mc-hint">{name ? `Hi ${name}. ` : ""}Ask for help planning or getting started.</p>
         ) : null}
         <ol className="flex flex-col gap-3">
           {messages.map((message) => (
@@ -220,6 +266,7 @@ export function AssistantPanel() {
                 <span className="sr-only">{message.role === "user" ? "You said:" : "Assistant:"}</span>
                 {message.content}
               </div>
+              {message.role === "assistant" ? <ReadAloud text={message.content} label="Read this reply aloud" /> : null}
               {message.role === "assistant"
                 ? proposalsFrom(message.proposal).map((proposal, index) => (
                     <div key={index} className="mt-2 max-w-[22rem]">
@@ -236,13 +283,31 @@ export function AssistantPanel() {
           </p>
         ) : null}
         {error ? (
-          <div className="mt-3 rounded-xl border-2 border-danger p-3" role="alert">
-            <p className="font-semibold text-danger">{error.message}</p>
-            <p className="mc-hint">Your message is kept below.</p>
-            <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={() => send(error.text)}>
-              <RotateCcw size={14} aria-hidden="true" /> Try again
+          <AiErrorNotice code={error.code} message={error.message} textKept={input.trim() === error.text}>
+            <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm" onClick={() => send(error.text)}>
+              <RotateCcw size={14} aria-hidden="true" /> Retry
             </button>
-          </div>
+            {error.helpRequest === "missing_information" && taskId ? (
+              <button
+                type="button"
+                className="mc-btn mc-btn-ghost mc-btn-sm"
+                onClick={() => {
+                  closeAssistant();
+                  openMissingInfo(taskId);
+                }}
+              >
+                Write it myself
+              </button>
+            ) : taskId ? (
+              <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={closeAssistant}>
+                Continue manually
+              </button>
+            ) : (
+              <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={() => openTaskEditor(null, error.text)}>
+                <Plus size={14} aria-hidden="true" /> Add a task myself
+              </button>
+            )}
+          </AiErrorNotice>
         ) : null}
       </div>
 

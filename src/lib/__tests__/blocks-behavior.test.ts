@@ -75,6 +75,10 @@ describe("task filters and sorting", () => {
 
   it("rejects the removed Blocked status", () => {
     expect(taskInputSchema.safeParse({ title: "x", status: "blocked" }).success).toBe(false);
+    expect(taskInputSchema.safeParse({ title: "x", source_link: "not a url" }).success).toBe(false);
+    expect(taskInputSchema.safeParse({ title: "x", source_link: "javascript:alert(1)" }).success).toBe(false);
+    expect(taskInputSchema.parse({ title: "x", source_link: "" }).source_link).toBeNull();
+    expect(taskInputSchema.parse({ title: "x", source_link: "https://example.test/a" }).source_link).toBe("https://example.test/a");
   });
 });
 

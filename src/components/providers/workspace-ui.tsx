@@ -1,8 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import type { HelpRequest } from "@/lib/schemas";
 
-export type SettingsSection = "profile" | "appearance" | "workspace" | "notifications" | "ai" | "account";
+export type SettingsSection = "profile" | "appearance" | "workspace" | "notifications" | "rewards" | "ai" | "account";
 export type AssistantMode = "chat" | "help_me_start" | "planning" | "missing_information";
 
 export interface AssistantRequest {
@@ -10,6 +11,9 @@ export interface AssistantRequest {
   taskId?: string | null;
   message?: string;
   autoSend?: boolean;
+  helpRequest?: HelpRequest;
+  // Only an explicit request adds a group's content to the conversation.
+  groupId?: string;
 }
 
 interface WorkspaceUI {
@@ -36,13 +40,17 @@ interface WorkspaceUI {
   openPlanning: (prefill?: string) => void;
   closePlanning: () => void;
 
-  taskEditor: { taskId: string | null } | null;
-  openTaskEditor: (taskId: string | null) => void;
+  taskEditor: { taskId: string | null; title?: string; blockId?: string } | null;
+  openTaskEditor: (taskId: string | null, title?: string, blockId?: string) => void;
   closeTaskEditor: () => void;
 
-  missingInfoTaskId: string | null;
-  openMissingInfo: (taskId: string) => void;
+  missingInfo: { taskId: string; entryId: string | null } | null;
+  // With an entry id, the form edits that entry instead of adding one.
+  openMissingInfo: (taskId: string, entryId?: string) => void;
   closeMissingInfo: () => void;
+
+  guideStep: number | null;
+  setGuideStep: (step: number | null) => void;
 
   searchOpen: boolean;
   setSearchOpen: (value: boolean) => void;
@@ -62,8 +70,9 @@ export function WorkspaceUIProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<SettingsSection | null>(null);
   const [planningOpen, setPlanningOpen] = useState(false);
   const [planningPrefill, setPlanningPrefill] = useState("");
-  const [taskEditor, setTaskEditor] = useState<{ taskId: string | null } | null>(null);
-  const [missingInfoTaskId, setMissingInfoTaskId] = useState<string | null>(null);
+  const [taskEditor, setTaskEditor] = useState<{ taskId: string | null; title?: string; blockId?: string } | null>(null);
+  const [missingInfo, setMissingInfo] = useState<{ taskId: string; entryId: string | null } | null>(null);
+  const [guideStep, setGuideStep] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
@@ -125,12 +134,15 @@ export function WorkspaceUIProvider({ children }: { children: ReactNode }) {
     closePlanning: () => setPlanningOpen(false),
 
     taskEditor,
-    openTaskEditor: (taskId) => setTaskEditor({ taskId }),
+    openTaskEditor: (taskId, title, blockId) => setTaskEditor({ taskId, title, blockId }),
     closeTaskEditor: () => setTaskEditor(null),
 
-    missingInfoTaskId,
-    openMissingInfo: (taskId) => setMissingInfoTaskId(taskId),
-    closeMissingInfo: () => setMissingInfoTaskId(null),
+    missingInfo,
+    openMissingInfo: (taskId, entryId) => setMissingInfo({ taskId, entryId: entryId ?? null }),
+    closeMissingInfo: () => setMissingInfo(null),
+
+    guideStep,
+    setGuideStep,
 
     searchOpen,
     setSearchOpen,

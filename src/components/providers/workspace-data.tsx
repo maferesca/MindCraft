@@ -1,15 +1,22 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { cacheAppearance } from "@/lib/appearance-cache";
+import { blockPlacement } from "@/lib/block-capabilities";
+import { ACHIEVEMENTS, levelProgress, rewardFeedback } from "@/lib/xp";
 import { BLOCK_DEFINITIONS, GRID_COLUMNS, findFreePosition, sizeFor } from "@/lib/blocks";
+import { createEncouragementPicker, type EncouragementKind } from "@/lib/encouragement";
+import { clearSessionData } from "@/lib/clear-session-data";
 import { createLocalRepository } from "@/lib/data/local-repository";
-import type { Repository, Row, TableName } from "@/lib/data/repository";
+import { RepositoryError, type Repository, type Row, type TableName } from "@/lib/data/repository";
 import { createSupabaseRepository } from "@/lib/data/supabase-repository";
+import { createWriteTracker } from "@/lib/data/write-tracker";
 import { browserTimezone } from "@/lib/dates";
 import { DEFAULT_PREFERENCES, applyPreferencesToDocument, normalizePreferences, type Preferences } from "@/lib/preferences";
 import { proposalSchema, type Proposal, type TaskInput } from "@/lib/schemas";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { NO_SUPPORT_YET, taskBlocks } from "@/lib/task-helpers";
+import { normalizeTitle, proposalRecordId } from "@/lib/task-plan";
 import type {
   BlockType,
   CalendarEvent,
@@ -25,12 +32,17 @@ import type {
   Streak,
   Task,
   TaskStep,
+  UserAchievement,
   Workspace,
   WorkspaceBlock,
+  XpTransaction,
 } from "@/lib/types";
 import { useNotify } from "../ui/notifications";
 
 type Status = "loading" | "ready" | "signed_out" | "error";
+
+const ENCOURAGEMENT_GROUP = "encouragement";
+const REWARDS_GROUP = "rewards";
 
 export interface DeletedTaskSnapshot {
   task: Task;
@@ -48,11 +60,31 @@ interface CollectionActions<T> {
   remove: (id: string) => Promise<boolean>;
 }
 
+export interface Progress {
+  totalXp: number;
+  // Newest first.
+  transactions: XpTransaction[];
+  achievements: UserAchievement[];
+}
+
+const NO_PROGRESS: Progress = { totalXp: 0, transactions: [], achievements: [] };
+
+async function readProgress(repo: Repository): Promise<Progress> {
+  const [totals, transactions, achievements] = await Promise.all([
+    repo.list<{ total_xp: number }>("user_progress"),
+    repo.list<XpTransaction>("xp_transactions"),
+    repo.list<UserAchievement>("user_achievements"),
+  ]);
+  return { totalXp: totals[0]?.total_xp ?? 0, transactions: [...transactions].sort((a, b) => b.created_at.localeCompare(a.created_at)), achievements };
+}
+
 interface WorkspaceData {
   status: Status;
   loadError: string | null;
   mode: Repository["mode"] | null;
   email: string | null;
+  // True only while storage has confirmed every change made so far.
+  workSaved: boolean;
   profile: Profile | null;
   preferences: Preferences;
   notificationPreferences: NotificationPreferences | null;
@@ -70,17 +102,25 @@ interface WorkspaceData {
   messages: ChatMessage[];
   streak: Streak | null;
   previousVisitDate: string | null;
+  progress: Progress;
 
-  updatePreferences: (patch: Partial<Preferences>) => Promise<void>;
+  // Resolves to false when the change could not be saved.
+  updatePreferences: (patch: Partial<Preferences>) => Promise<boolean>;
+  // Call only after the action was saved. It respects the preference and the frequency limit.
+  encourage: (kind: EncouragementKind) => void;
+  // For rewards the database can't see by itself. It checks the facts and decides.
+  claimProgress: (action: "focus_start" | "first_step", taskId: string) => Promise<void>;
+  // Sessions are timed on the server, so one can't be claimed without passing time.
+  trackFocusSession: (event: "begin" | "finish") => void;
   updateProfile: (patch: Partial<Profile>) => Promise<void>;
   updateNotificationPreferences: (patch: Partial<NotificationPreferences>) => Promise<void>;
   renameWorkspace: (name: string) => Promise<void>;
 
   createTask: (input: TaskInput, stepTexts?: string[]) => Promise<Task | null>;
-  updateTask: (id: string, patch: Partial<Task>) => Promise<void>;
+  updateTask: (id: string, patch: Partial<Task>) => Promise<boolean>;
   deleteTask: (id: string) => Promise<DeletedTaskSnapshot | null>;
   restoreTask: (snapshot: DeletedTaskSnapshot) => Promise<void>;
-  addStep: (taskId: string, text: string) => Promise<TaskStep | null>;
+  addStep: (taskId: string, text: string, position?: number) => Promise<TaskStep | null>;
   updateStep: (id: string, patch: Partial<TaskStep>) => Promise<void>;
   deleteStep: (id: string) => Promise<void>;
   reviewActions: CollectionActions<ReviewItem>;
@@ -99,14 +139,16 @@ interface WorkspaceData {
   deleteEvent: (id: string) => Promise<void>;
 
   saveLayout: (draft: WorkspaceBlock[]) => Promise<boolean>;
-  addBlocks: (types: Array<{ type: BlockType; size?: { w: number; h: number } }>) => Promise<void>;
+  addBlocks: (types: Array<{ type: BlockType; size?: { w: number; h: number }; config?: Record<string, unknown> }>) => Promise<void>;
   updateBlockConfig: (id: string, config: Record<string, unknown>) => Promise<void>;
+  updateBlockTitle: (id: string, title: string | null) => Promise<void>;
   resetLayout: () => Promise<void>;
 
   appendMessage: (role: ChatMessage["role"], content: string, proposal?: unknown) => Promise<ChatMessage | null>;
   clearChat: () => Promise<void>;
 
-  applyProposal: (proposal: Proposal) => Promise<string>;
+  // The key identifies this proposal, so applying it again never adds a second copy.
+  applyProposal: (proposal: Proposal, key?: string) => Promise<string>;
   signOut: () => Promise<void>;
 }
 
@@ -128,6 +170,17 @@ function withoutOwner<T extends { user_id: string }>(record: T): Row {
   const copy: Row = { ...record };
   delete copy.user_id;
   return copy;
+}
+
+// For records with a deterministic id: the second attempt reaches the same row, and
+// the database rejects only that copy.
+async function insertOnce<T>(repo: Repository, table: TableName, row: Row): Promise<T | null> {
+  try {
+    return await repo.insert<T>(table, row);
+  } catch (error) {
+    if (error instanceof RepositoryError && error.code === "23505") return null;
+    throw error;
+  }
 }
 
 function newLocalId() {
@@ -184,8 +237,14 @@ function useCollectionActions<T extends { id: string }>(
 }
 
 export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
-  const { notify } = useNotify();
+  const { notify, dismissGroup } = useNotify();
+  const [encouragements] = useState(createEncouragementPicker);
+  const [progress, setProgress] = useState<Progress>(NO_PROGRESS);
+  const progressRef = useRef<Progress>(NO_PROGRESS);
   const repoRef = useRef<Repository | null>(null);
+  const preferencesRef = useRef<Preferences>(DEFAULT_PREFERENCES);
+  const [writes] = useState(createWriteTracker);
+  const workSaved = useSyncExternalStore(writes.subscribe, writes.isConfirmed, () => false);
   const [status, setStatus] = useState<Status>("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [session, setSession] = useState<{ mode: Repository["mode"]; email: string | null } | null>(null);
@@ -232,7 +291,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           if (!cancelled) setStatus("signed_out");
           return;
         }
-        repoRef.current = repo;
+        repoRef.current = writes.wrap(repo);
         setSession({ mode: repo.mode, email: repo.email });
         const [profiles, prefRows, notificationRows, workspaces, blockRows, taskRows, stepRows, noteRows, eventRows, conversations, reviewRows, projectRows, resourceRows, checkInRows] =
           await Promise.all([
@@ -261,11 +320,14 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const loadedPreferences = normalizePreferences(prefRows[0]?.settings);
         const currentConversation = conversations[0]?.id ?? null;
         const loadedMessages = currentConversation ? await repo.list<ChatMessage>("messages") : [];
+        // Rewards are extra. If they can't load, the workspace still opens.
+        const loadedProgress = await readProgress(repoRef.current!).catch(() => NO_PROGRESS);
         const previous = await repo.getStreak();
         const visit = await repo.recordVisit(currentProfile?.timezone ?? browserTimezone());
         if (cancelled) return;
 
         setProfile(currentProfile);
+        preferencesRef.current = loadedPreferences;
         setPreferences(loadedPreferences);
         applyPreferencesToDocument(loadedPreferences);
         cacheAppearance(loadedPreferences);
@@ -285,6 +347,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         setMessages(loadedMessages);
         setPreviousVisitDate(previous?.last_visit_date ?? null);
         setStreak(visit);
+        progressRef.current = loadedProgress;
+        setProgress(loadedProgress);
         setStatus("ready");
       } catch (error) {
         if (cancelled) return;
@@ -297,7 +361,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [writes]);
 
   // ---------------------------------------------------------------------------
   // Profile and preferences
@@ -305,17 +369,89 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
   const updatePreferences = useCallback(
     async (patch: Partial<Preferences>) => {
-      const next = normalizePreferences({ ...preferences, ...patch });
+      // Two changes in the same moment must build on each other, so the latest
+      // value comes from the ref rather than from the last render.
+      const next = normalizePreferences({ ...preferencesRef.current, ...patch });
+      preferencesRef.current = next;
       setPreferences(next);
       applyPreferencesToDocument(next);
       cacheAppearance(next);
+      if (!next.motivationalMessages) dismissGroup(ENCOURAGEMENT_GROUP);
       try {
         await requireRepo(repoRef).update("preferences", requireRepo(repoRef).userId, { settings: next });
+        return true;
       } catch (error) {
         reportError(error);
+        return false;
       }
     },
-    [preferences, reportError],
+    [dismissGroup, reportError],
+  );
+
+  const encourage = useCallback(
+    (kind: EncouragementKind) => {
+      if (!preferencesRef.current.motivationalMessages) return;
+      const message = encouragements.next(kind, Date.now());
+      if (message) notify(message, { tone: "encouragement", group: ENCOURAGEMENT_GROUP, onlyIfQuiet: true, durationMs: 6000 });
+    },
+    [encouragements, notify],
+  );
+
+  // Reads what the database awarded and shows each new reward once. Comparing with
+  // what is already known means reloading the page never replays anything.
+  const reviewProgress = useCallback(async () => {
+    const next = await readProgress(requireRepo(repoRef)).catch(() => null);
+    if (!next) return false;
+    const previous = progressRef.current;
+    const known = new Set(previous.transactions.map((reward) => reward.id));
+    const fresh = next.transactions.filter((reward) => !known.has(reward.id));
+    const knownAchievements = new Set(previous.achievements.map((item) => item.achievement));
+    const unlocked = next.achievements.filter((item) => !knownAchievements.has(item.achievement));
+    progressRef.current = next;
+    setProgress(next);
+
+    const settings = preferencesRef.current;
+    if (!settings.rewardsEnabled) return false;
+    let shown = false;
+    if (settings.xpNotifications && (fresh.length || unlocked.length)) {
+      const { title, lines } = fresh.length ? rewardFeedback(fresh) : { title: "Achievement unlocked", lines: [] as string[] };
+      dismissGroup(REWARDS_GROUP);
+      notify(title, {
+        tone: "encouragement",
+        group: REWARDS_GROUP,
+        durationMs: 7000,
+        details: [...lines, ...unlocked.map((item) => `Achievement: ${ACHIEVEMENTS[item.achievement].name}`)],
+      });
+      shown = true;
+    }
+    const before = levelProgress(previous.totalXp).current;
+    const after = levelProgress(next.totalXp).current;
+    if (settings.levelUpMessages && after.level > before.level) {
+      notify("Level up!", { tone: "encouragement", details: [`You've reached Level ${after.level} — ${after.name}.`], durationMs: 7000 });
+      shown = true;
+    }
+    return shown;
+  }, [notify, dismissGroup]);
+
+  const claimProgress = useCallback(
+    async (action: "focus_start" | "first_step", taskId: string) => {
+      try {
+        await requireRepo(repoRef).claimProgress(action, taskId);
+        await reviewProgress();
+      } catch (error) {
+        // A reward must never get in the way of the work itself.
+        console.error(error);
+      }
+    },
+    [reviewProgress],
+  );
+
+  const trackFocusSession = useCallback(
+    (event: "begin" | "finish") => {
+      const repo = requireRepo(repoRef);
+      (event === "begin" ? repo.beginFocusSession() : repo.finishFocusSession().then(reviewProgress)).catch((error) => console.error(error));
+    },
+    [reviewProgress],
   );
 
   const updateProfile = useCallback(
@@ -362,7 +498,15 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
   const reviewActions = useCollectionActions<ReviewItem>("task_review_items", setReviewItems, repoRef, reportError);
   const resourceActions = useCollectionActions<Resource>("resources", setResources, repoRef, reportError);
-  const checkInActions = useCollectionActions<CheckIn>("check_ins", setCheckIns, repoRef, reportError);
+  const checkInCollection = useCollectionActions<CheckIn>("check_ins", setCheckIns, repoRef, reportError);
+  const checkInActions: CollectionActions<CheckIn> = {
+    ...checkInCollection,
+    update: async (id, patch) => {
+      const saved = await checkInCollection.update(id, patch);
+      if (saved && patch.help_status === "resolved") reviewProgress();
+      return saved;
+    },
+  };
   const projectActions = useCollectionActions<Project>("projects", setProjects, repoRef, reportError);
   const createProject = projectActions.create;
 
@@ -401,12 +545,21 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       try {
         const updated = await requireRepo(repoRef).update<Task>("tasks", id, patch as Row);
         setTasks((current) => current.map((task) => (task.id === id ? updated : task)));
+        // Only after the save succeeded, so this message is always true.
+        // The XP message says it all when there is one, so only one message shows.
+        if (patch.status === "done" && before?.status !== "done") {
+          reviewProgress().then((shown) => {
+            if (!shown) encourage("task");
+          });
+        }
+        return true;
       } catch (error) {
         if (before) setTasks((current) => current.map((task) => (task.id === id ? before : task)));
         reportError(error);
+        return false;
       }
     },
-    [tasks, reportError],
+    [tasks, encourage, reviewProgress, reportError],
   );
 
   const deleteTask = useCallback(
@@ -474,10 +627,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   );
 
   const addStep = useCallback(
-    async (taskId: string, text: string) => {
-      const position = steps.filter((step) => step.task_id === taskId).reduce((max, step) => Math.max(max, step.position + 1), 0);
+    async (taskId: string, text: string, position?: number) => {
+      const next = position ?? steps.filter((step) => step.task_id === taskId).reduce((max, step) => Math.max(max, step.position + 1), 0);
       try {
-        const step = await requireRepo(repoRef).insert<TaskStep>("task_steps", { task_id: taskId, text, position, done: false });
+        const step = await requireRepo(repoRef).insert<TaskStep>("task_steps", { task_id: taskId, text, position: next, done: false });
         setSteps((current) => [...current, step]);
         return step;
       } catch (error) {
@@ -630,12 +783,14 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           const saved = savedById.get(block.id);
           const fields = {
             block_type: block.block_type,
-            title: block.title,
-            // Settings save on their own, so a layout save never overwrites them.
+            // Titles and settings save on their own, so a layout save never overwrites them.
+            title: saved ? saved.title : ((draftConfigs[block.id]?.title as string | null | undefined) ?? block.title),
             config: saved?.config ?? { ...block.config, ...draftConfigs[block.id] },
             layouts: block.layouts,
             mobile_order: block.mobile_order,
             hidden: block.hidden,
+            group_id: block.group_id ?? null,
+            group_title: block.group_title ?? null,
           };
           if (!saved) {
             result.push(await requireRepo(repoRef).insert<WorkspaceBlock>("workspace_blocks", { ...fields, workspace_id: workspace.id }));
@@ -658,12 +813,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
   // Adds blocks directly (used by confirmed proposals and quick-add outside Creative Mode).
   const addBlocks = useCallback(
-    async (types: Array<{ type: BlockType; size?: { w: number; h: number } }>) => {
+    async (types: Array<{ type: BlockType; size?: { w: number; h: number }; config?: Record<string, unknown> }>) => {
       if (!workspace) return;
       const occupiedLg: GridPosition[] = blocks.filter((block) => !block.hidden && block.layouts.lg).map((block) => block.layouts.lg!);
       const created: WorkspaceBlock[] = [];
       try {
-        for (const { type, size } of types) {
+        for (const { type, size, config } of types) {
           const lgSize = size ?? sizeFor(type, "lg");
           const lg = findFreePosition(occupiedLg, Math.min(lgSize.w, GRID_COLUMNS.lg), lgSize.h, GRID_COLUMNS.lg);
           occupiedLg.push(lg);
@@ -672,7 +827,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
               workspace_id: workspace.id,
               block_type: type,
               title: null,
-              config: {},
+              config: config ?? {},
               layouts: { lg },
               mobile_order: 0,
               hidden: false,
@@ -704,6 +859,22 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       }
     },
     [blocks, reportError],
+  );
+
+  const updateBlockTitle = useCallback(
+    async (id: string, title: string | null) => {
+      if (id.startsWith("new-")) {
+        setDraftConfigs((current) => ({ ...current, [id]: { ...current[id], title } }));
+        return;
+      }
+      setBlocks((current) => current.map((item) => (item.id === id ? { ...item, title } : item)));
+      try {
+        await requireRepo(repoRef).update("workspace_blocks", id, { title });
+      } catch (error) {
+        reportError(error);
+      }
+    },
+    [reportError],
   );
 
   const resetLayout = useCallback(async () => {
@@ -770,33 +941,171 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   // decides what is allowed (known task ids, block types, sizes, preference values).
   // ---------------------------------------------------------------------------
 
+  // Every record of a plan has a deterministic id. If the work was already saved, or
+  // a retry follows a partial failure, the database rejects only the existing rows.
+  const applyTaskPlan = useCallback(
+    async (plan: Extract<Proposal, { type: "task_plan" }>, key: string) => {
+      const repo = requireRepo(repoRef);
+      const { task: draft } = plan;
+      const plannedId = await proposalRecordId(key);
+      // A plan for work already on the list joins that task instead of repeating it.
+      const sameTitle = (task: Task) => task.status !== "done" && normalizeTitle(task.title) === normalizeTitle(draft.title);
+      const existing = plan.task_id ? tasks.find((task) => task.id === plan.task_id) : (tasks.find((task) => task.id === plannedId) ?? tasks.find(sameTitle));
+      if (plan.task_id && !existing) throw new Error("That task no longer exists.");
+      const taskId = existing?.id ?? plannedId;
+      let skippedEstimate = false;
+      let alreadySaved = false;
+
+      if (existing) {
+        // Instructions and filled fields are never overwritten.
+        const patch: Partial<Task> = {};
+        if (!existing.expected_result && draft.deliverable) patch.expected_result = draft.deliverable;
+        if (existing.estimated_minutes == null && draft.estimated_minutes) patch.estimated_minutes = draft.estimated_minutes;
+        if (Object.keys(patch).length) await updateTask(existing.id, patch);
+      } else {
+        const row: Row = {
+          id: taskId,
+          status: "todo",
+          title: draft.title,
+          expected_result: draft.deliverable || null,
+          due_date: draft.due_date ?? null,
+          priority: draft.priority ?? null,
+          block_id: plan.task_block_id ?? null,
+        };
+        let created: Task | null;
+        try {
+          created = await insertOnce<Task>(repo, "tasks", draft.estimated_minutes ? { ...row, estimated_minutes: draft.estimated_minutes } : row);
+        } catch (error) {
+          // The app can deploy before the estimates migration runs. The task still matters more.
+          if (!(error instanceof RepositoryError) || !["42703", "PGRST204"].includes(error.code ?? "")) throw error;
+          skippedEstimate = true;
+          created = await insertOnce<Task>(repo, "tasks", row);
+        }
+        if (created) {
+          const task = created;
+          setTasks((current) => (current.some((item) => item.id === task.id) ? current : [...current, task]));
+        } else {
+          alreadySaved = true;
+          setTasks(await repo.list<Task>("tasks"));
+        }
+      }
+
+      const taskSteps = steps.filter((step) => step.task_id === taskId);
+      if (!taskSteps.some((step) => step.text === draft.first_action)) {
+        // Placed first, so it becomes the current step in the Task guide and Focus Mode.
+        const position = taskSteps.reduce((lowest, step) => Math.min(lowest, step.position - 1), 0);
+        const step = await insertOnce<TaskStep>(repo, "task_steps", { id: await proposalRecordId(`${key}:step`), task_id: taskId, text: draft.first_action, position, done: false });
+        if (step) setSteps((current) => [...current, step]);
+      }
+      if (draft.done_when && !reviewItems.some((item) => item.task_id === taskId && item.text === draft.done_when)) {
+        const position = reviewItems.filter((item) => item.task_id === taskId).length;
+        const item = await insertOnce<ReviewItem>(repo, "task_review_items", { id: await proposalRecordId(`${key}:review`), task_id: taskId, text: draft.done_when, position, done: false });
+        if (item) setReviewItems((current) => [...current, item]);
+      }
+
+      const type = plan.recommended_block?.block_type;
+      if (type) {
+        const config = type === "next_step" ? { taskId } : undefined;
+        const placement = blockPlacement(blocks, type);
+        if (placement === "available") await addBlocks([{ type, config }]);
+        if (placement === "hidden") {
+          const hiddenBlock = blocks.find((block) => block.block_type === type);
+          if (hiddenBlock) {
+            await saveLayout(blocks.map((block) => (block.id === hiddenBlock.id ? { ...block, hidden: false } : block)));
+            if (config) await updateBlockConfig(hiddenBlock.id, config);
+          }
+        }
+        if (placement === "placed" && config) {
+          const placed = blocks.find((block) => block.block_type === type && !block.hidden);
+          if (placed) await updateBlockConfig(placed.id, config);
+        }
+      }
+      const saved = existing?.id === plannedId || alreadySaved ? "This task was already saved." : existing ? "Plan added to the task." : "Task saved.";
+      return skippedEstimate ? `${saved} The estimated time was not saved because the database needs an update.` : saved;
+    },
+    [tasks, steps, reviewItems, blocks, updateTask, addBlocks, saveLayout, updateBlockConfig],
+  );
+
+  // Each task and step has a deterministic id, so a retry after a partial failure
+  // adds only what is missing. A task already on the list is not added again.
+  const applyCreateTasks = useCallback(
+    async (proposal: Extract<Proposal, { type: "create_tasks" }>, key: string) => {
+      const repo = requireRepo(repoRef);
+      const known = new Set(tasks.filter((task) => task.status !== "done").map((task) => normalizeTitle(task.title)));
+      let added = 0;
+      for (const [index, task] of proposal.tasks.entries()) {
+        if (known.has(normalizeTitle(task.title))) continue;
+        known.add(normalizeTitle(task.title));
+        const id = await proposalRecordId(`${key}:task:${index}`);
+        const created = await insertOnce<Task>(repo, "tasks", {
+          id,
+          status: "todo",
+          title: task.title,
+          description: task.description || null,
+          expected_result: task.expected_result || null,
+          due_date: task.due_date ?? null,
+          priority: task.priority ?? null,
+        });
+        if (!created) continue;
+        added += 1;
+        setTasks((current) => [...current, created]);
+        for (const [position, text] of (task.steps ?? []).entries()) {
+          const step = await insertOnce<TaskStep>(repo, "task_steps", { id: await proposalRecordId(`${key}:task:${index}:step:${position}`), task_id: id, text, position, done: false });
+          if (step) setSteps((current) => [...current, step]);
+        }
+      }
+      if (!added) return "These tasks are already on your list.";
+      return added === 1 ? "Added 1 task." : `Added ${added} tasks.`;
+    },
+    [tasks],
+  );
+
   const applyProposal = useCallback(
-    async (candidate: Proposal): Promise<string> => {
+    async (candidate: Proposal, key?: string): Promise<string> => {
       const parsed = proposalSchema.safeParse(candidate);
       if (!parsed.success) throw new Error("This suggestion is no longer valid.");
       const proposal = parsed.data;
       switch (proposal.type) {
-        case "create_tasks": {
-          let count = 0;
-          for (const task of proposal.tasks) {
-            const created = await createTask(
-              {
-                title: task.title,
-                description: task.description ?? null,
-                expected_result: task.expected_result ?? null,
-                due_date: task.due_date ?? null,
-                priority: task.priority ?? null,
-              },
-              task.steps ?? [],
-            );
-            if (created) count += 1;
-          }
-          return count === 1 ? "Added 1 task." : `Added ${count} tasks.`;
-        }
+        case "task_plan":
+          return applyTaskPlan(proposal, key ?? crypto.randomUUID());
+        case "create_tasks":
+          return applyCreateTasks(proposal, key ?? crypto.randomUUID());
         case "propose_steps": {
           if (!tasks.some((task) => task.id === proposal.task_id)) throw new Error("That task no longer exists.");
-          for (const text of proposal.steps) await addStep(proposal.task_id, text);
-          return `Added ${proposal.steps.length} steps.`;
+          const taskSteps = steps.filter((step) => step.task_id === proposal.task_id);
+          const known = new Set(taskSteps.map((step) => normalizeTitle(step.text)));
+          const fresh = proposal.steps.filter((text) => !known.has(normalizeTitle(text)));
+          if (!fresh.length) return "These steps are already on this task.";
+          const positions = taskSteps.map((step) => step.position);
+          const start = proposal.insert_first ? Math.min(0, ...positions) - fresh.length : Math.max(-1, ...positions) + 1;
+          for (const [index, text] of fresh.entries()) {
+            if (!(await addStep(proposal.task_id, text, start + index))) throw new Error("A step could not be saved. Try again.");
+          }
+          return fresh.length === 1 ? "Added 1 step." : `Added ${fresh.length} steps.`;
+        }
+        case "move_task": {
+          const destination = taskBlocks(blocks).find((block) => block.id === proposal.task_block_id);
+          if (!destination || !tasks.some((task) => task.id === proposal.task_id)) throw new Error("That task or block no longer exists.");
+          if (!(await updateTask(proposal.task_id, { block_id: destination.id }))) throw new Error("The task could not be moved. Try again.");
+          return `Moved to ${destination.title || "Tasks"}.`;
+        }
+        case "record_missing_info": {
+          if (!tasks.some((task) => task.id === proposal.task_id)) throw new Error("That task no longer exists.");
+          const repeated = checkIns.some(
+            (entry) => entry.kind === "help" && entry.task_id === proposal.task_id && entry.help_status !== "resolved" && normalizeTitle(entry.blocking ?? "") === normalizeTitle(proposal.missing),
+          );
+          if (repeated) return "This is already recorded on the task.";
+          const entry = await insertOnce<CheckIn>(requireRepo(repoRef), "check_ins", {
+            id: await proposalRecordId(`${key ?? crypto.randomUUID()}:missing`),
+            kind: "help",
+            task_id: proposal.task_id,
+            blocking: proposal.missing,
+            support: proposal.support || NO_SUPPORT_YET,
+            help_status: "open",
+            follow_ups: [],
+          });
+          if (entry) setCheckIns((current) => [...current, entry]);
+          return "Saved to this task.";
         }
         case "suggest_blocks": {
           await addBlocks(proposal.blocks.map((block) => ({ type: block.block_type })));
@@ -821,11 +1130,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           return "Draft ready to copy.";
       }
     },
-    [tasks, createTask, addStep, addBlocks, updatePreferences],
+    [tasks, steps, checkIns, blocks, applyTaskPlan, applyCreateTasks, addStep, addBlocks, updatePreferences, updateTask],
   );
 
   const signOut = useCallback(async () => {
     await repoRef.current?.signOut();
+    clearSessionData();
     // A full page load (not client navigation) drops every in-memory record of this account.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign("/sign-in");
@@ -836,6 +1146,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     loadError,
     mode: session?.mode ?? null,
     email: session?.email ?? null,
+    workSaved,
     profile,
     preferences,
     notificationPreferences,
@@ -852,8 +1163,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     events,
     messages,
     streak,
+    progress,
     previousVisitDate,
     updatePreferences,
+    encourage,
+    claimProgress,
+    trackFocusSession,
     updateProfile,
     updateNotificationPreferences,
     renameWorkspace,
@@ -878,6 +1193,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     saveLayout,
     addBlocks,
     updateBlockConfig,
+    updateBlockTitle,
     resetLayout,
     appendMessage,
     clearChat,

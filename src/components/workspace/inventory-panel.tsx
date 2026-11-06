@@ -60,7 +60,11 @@ export function InventoryPanel({ hiddenBlocks, dragging, onAdd, onRestore, onDra
                   <li key={block.id}>
                     <button
                       type="button"
-                      onClick={() => onRestore(block.id)}
+                      onClick={() => {
+                        onRestore(block.id);
+                        // This button disappears, so keep focus inside the panel.
+                        closeRef.current?.focus();
+                      }}
                       className="mc-btn mc-btn-secondary mc-btn-sm"
                       aria-label={`Show hidden ${label} block`}
                     >
@@ -110,6 +114,9 @@ function InventoryCard({ item, onAdd, onDragTypeChange }: { item: CatalogItem; o
         <h4 className="min-w-0 flex-1 font-bold leading-tight">{item.name}</h4>
       </div>
       <p className="text-sm leading-snug">{item.description}</p>
+      <p className="mc-hint leading-snug">
+        <span className="font-semibold">Example:</span> {item.example}
+      </p>
       <BlockPreview id={item.id} />
       {item.options.length ? (
         <p className="mc-hint leading-snug">

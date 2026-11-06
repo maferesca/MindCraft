@@ -173,5 +173,138 @@ check("Anonymous requests see no tasks", await (async () => {
   }
 })());
 
+// Task estimates and repeated proposal ids.
+const planId = "33333333-3333-4333-8333-333333333333";
+const planInsert = `insert into tasks (id, user_id, title, estimated_minutes) values ('${planId}', '${alice}', 'Plan task', 30) returning id`;
+await as(alice, planInsert);
+check("A task keeps its estimated minutes", (await as(alice, `select estimated_minutes from tasks where id = '${planId}'`)).rows[0]?.estimated_minutes === 30);
+check("Confirming a proposal twice cannot create a second task", await fails(alice, planInsert));
+check("An estimate outside 1 to 600 minutes is rejected", await fails(alice, `insert into tasks (user_id, title, estimated_minutes) values ('${alice}', 'Too long', 601)`));
+check("Bob cannot see Alice's plan task", (await as(bob, `select id from tasks where id = '${planId}'`)).rows.length === 0);
+
+// Task blocks and work groups.
+const aliceList = (await as(alice, "insert into workspace_blocks (user_id, workspace_id, block_type, title, group_id, group_title) values ($1, $2, 'task_list', 'Launch', gen_random_uuid(), 'Launch group') returning id", [alice, workspaceId])).rows[0].id;
+const notesBlock = (await as(alice, "insert into workspace_blocks (user_id, workspace_id, block_type) values ($1, $2, 'notes') returning id", [alice, workspaceId])).rows[0].id;
+const blockTask = (await as(alice, "insert into tasks (user_id, title, block_id) values ($1, 'In a block', $2) returning id", [alice, aliceList])).rows[0].id;
+const bobTask = (await as(bob, "insert into tasks (user_id, title) values ($1, 'Bob task') returning id", [bob])).rows[0].id;
+check("A task keeps its task block", (await as(alice, "select block_id from tasks where id = $1", [blockTask])).rows[0]?.block_id === aliceList);
+check("Bob cannot put a task in Alice's task block", await fails(bob, "update tasks set block_id = $1 where id = $2", [aliceList, bobTask]));
+check("Bob cannot create a task in Alice's task block", await fails(bob, "insert into tasks (user_id, title, block_id) values ($1, 'x', $2)", [bob, aliceList]));
+check("A task can only belong to a task block", await fails(alice, "update tasks set block_id = $1 where id = $2", [notesBlock, blockTask]));
+check("Bob cannot read Alice's groups", (await as(bob, "select * from workspace_blocks where group_id is not null")).rows.length === 0);
+check("A group title has a length limit", await fails(alice, "update workspace_blocks set group_title = repeat('x', 61) where id = $1", [aliceList]));
+await as(alice, "update workspace_blocks set group_id = null, group_title = null where id = $1", [aliceList]);
+check("Removing a group keeps its block", (await as(alice, "select id from workspace_blocks where id = $1", [aliceList])).rows.length === 1);
+await as(alice, "delete from workspace_blocks where id = $1", [aliceList]);
+const afterBlock = await as(alice, "select block_id, title from tasks where id = $1", [blockTask]);
+check("Removing a task block keeps its tasks", afterBlock.rows[0]?.title === "In a block" && afterBlock.rows[0]?.block_id === null);
+
+// MindCraft Journey: rewards are decided here, and no client can write them.
+const carol = "44444444-4444-4444-8444-444444444444";
+await db.exec(`insert into auth.users (id, email) values ('${carol}', 'carol@example.test');`);
+const xpOf = async (user) => (await as(user, "select coalesce((select total_xp from user_progress), 0) as total")).rows[0].total;
+const rewards = async (user, action) => (await as(user, "select amount from xp_transactions where action = $1", [action])).rows;
+const newTask = async (user, title, extra = "") => (await as(user, `insert into tasks (user_id, title${extra ? ", due_date" : ""}) values ($1, $2${extra ? ", " + extra : ""}) returning id`, [user, title])).rows[0].id;
+const complete = (user, id) => as(user, "update tasks set status = 'done' where id = $1", [id]);
+
+const plain = await newTask(carol, "No deadline");
+await complete(carol, plain);
+check("A task without a deadline earns the base 20 XP", (await xpOf(carol)) === 20);
+await as(carol, "update tasks set status = 'todo' where id = $1", [plain]);
+await complete(carol, plain);
+check("Reopening and completing a task earns nothing more", (await xpOf(carol)) === 20);
+check("A task's first completion unlocks First Step", (await as(carol, "select * from user_achievements where achievement = 'first_step'")).rows.length === 1);
+
+const again = await newTask(carol, "no deadline ");
+await complete(carol, again);
+check("A task recreated with the same title earns nothing that day", (await xpOf(carol)) === 20);
+
+const early = await newTask(carol, "Early task", "(now() + interval '10 days')::date");
+await db.exec(`alter table tasks disable trigger tasks_deadline_snapshot; update tasks set xp_deadline_set_at = now() - interval '1 day' where id = '${early}'; alter table tasks enable trigger tasks_deadline_snapshot;`);
+await as(carol, "update tasks set due_date = (now() + interval '40 days')::date where id = $1", [early]);
+const snapshot = (await as(carol, "select xp_deadline::date::text as d, due_date::text as e from tasks where id = $1", [early])).rows[0];
+check("Changing a deadline keeps the original snapshot", snapshot.d !== snapshot.e);
+await complete(carol, early);
+check("Finishing with most of the time left earns +15", (await rewards(carol, "early_bonus"))[0]?.amount === 15);
+check("The full bonus unlocks Early Bird", (await as(carol, "select * from user_achievements where achievement = 'early_bird'")).rows.length === 1);
+const afterBonus = await xpOf(carol);
+await as(carol, "update tasks set due_date = (now() + interval '80 days')::date, status = 'todo' where id = $1", [early]);
+await complete(carol, early);
+check("Editing a deadline and completing again adds no bonus", (await xpOf(carol)) === afterBonus);
+
+const late = await newTask(carol, "Late task", "(now() - interval '3 days')::date");
+await complete(carol, late);
+check("A late task still earns base XP and no bonus", (await xpOf(carol)) === afterBonus + 20 && (await rewards(carol, "early_bonus")).length === 1);
+const instant = await newTask(carol, "Instant task", "(now() + interval '30 days')::date");
+await complete(carol, instant);
+check("A far deadline on a brand new task earns no bonus", (await rewards(carol, "early_bonus")).length === 1);
+
+const bonusAt = async (deadline, setAt, done) => (await db.query(`select public.xp_deadline_bonus(${deadline}, ${setAt}, ${done}) as b`)).rows[0].b;
+const base = "timestamptz '2026-01-01 00:00Z'";
+const at = (hours) => `${base} + interval '${hours} hours'`;
+check("50% of the time left earns +15", (await bonusAt(at(100), base, at(50))) === 15);
+check("Just under 50% earns +10", (await bonusAt(at(100), base, at(51))) === 10);
+check("20% earns +10", (await bonusAt(at(100), base, at(80))) === 10);
+check("Under 20% earns +5", (await bonusAt(at(100), base, at(99))) === 5);
+check("At the deadline earns +0", (await bonusAt(at(100), base, at(100))) === 0);
+check("After the deadline earns +0", (await bonusAt(at(100), base, at(101))) === 0);
+check("A deadline before its start earns +0", (await bonusAt(base, at(5), at(1))) === 0);
+check("Under an hour of notice earns +0", (await bonusAt(at(0.5), base, at(0.25))) === 0);
+check("Under six hours of notice earns at most +5", (await bonusAt(at(5), base, at(1))) === 5);
+
+const blockerTask = await newTask(carol, "Blocked task");
+const blocker = (await as(carol, "insert into check_ins (user_id, kind, task_id, blocking, support, help_status) values ($1, 'help', $2, 'Need access', 'Ask IT', 'open') returning id", [carol, blockerTask])).rows[0].id;
+await as(carol, "update check_ins set help_status = 'resolved' where id = $1", [blocker]);
+check("A blocker resolved right after writing it earns nothing", (await rewards(carol, "blocker_resolved")).length === 0);
+await as(carol, "update check_ins set help_status = 'open' where id = $1", [blocker]);
+await db.exec(`alter table check_ins disable trigger check_ins_touch; update check_ins set created_at = now() - interval '1 day' where id = '${blocker}'; alter table check_ins enable trigger check_ins_touch;`);
+await as(carol, "update check_ins set help_status = 'resolved' where id = $1", [blocker]);
+await as(carol, "update check_ins set help_status = 'open' where id = $1", [blocker]);
+await as(carol, "update check_ins set help_status = 'resolved' where id = $1", [blocker]);
+check("Resolving a blocker earns +10 once", (await rewards(carol, "blocker_resolved")).length === 1);
+check("A resolved blocker unlocks Problem Solver", (await as(carol, "select * from user_achievements where achievement = 'problem_solver'")).rows.length === 1);
+
+const focusTask = await newTask(carol, "Focus task");
+await as(carol, "select award_focus_start($1)", [focusTask]);
+await as(carol, "select award_focus_start($1)", [focusTask]);
+check("Starting Focus Mode earns +5 once per task", (await rewards(carol, "focus_start")).length === 1);
+const stepTask = await newTask(carol, "Step task");
+await as(carol, "insert into task_steps (user_id, task_id, text, position) values ($1, $2, 'One', 0), ($1, $2, 'Two', 1)", [carol, stepTask]);
+await as(carol, "select award_first_step($1)", [stepTask]);
+check("The first step earns nothing until it is done", (await rewards(carol, "first_step")).length === 0);
+await as(carol, "update task_steps set done = true where task_id = $1 and position = 0", [stepTask]);
+await as(carol, "select award_first_step($1)", [stepTask]);
+await as(carol, "select award_first_step($1)", [stepTask]);
+check("The first step earns +5 once", (await rewards(carol, "first_step")).length === 1);
+
+for (let i = 0; i < 4; i += 1) { await as(carol, "select begin_focus_session()"); await as(carol, "select finish_focus_session()"); }
+check("Short sessions do not count as focus sessions", (await as(carol, "select * from focus_sessions where counted")).rows.length === 0);
+check("A session cannot be claimed without passing time", (await as(carol, "select * from user_achievements where achievement = 'focus_explorer'")).rows.length === 0);
+
+const totalBeforeDelete = await xpOf(carol);
+await as(carol, "delete from tasks where id = $1", [late]);
+check("Deleting a task keeps its earned XP", (await xpOf(carol)) === totalBeforeDelete);
+const summed = (await as(carol, "select coalesce(sum(amount), 0)::int as total from xp_transactions")).rows[0].total;
+check("Total XP matches the sum of its transactions", summed === totalBeforeDelete);
+
+check("Bob cannot read Carol's XP", (await as(bob, "select * from xp_transactions where user_id = $1", [carol])).rows.length === 0);
+check("Bob cannot read Carol's progress", (await as(bob, "select * from user_progress where user_id = $1", [carol])).rows.length === 0);
+check("Bob cannot read Carol's achievements", (await as(bob, "select * from user_achievements where user_id = $1", [carol])).rows.length === 0);
+check("Nobody can write their own XP total", await fails(carol, "update user_progress set total_xp = 99999"));
+check("Nobody can insert their own progress", await fails(bob, "insert into user_progress (user_id, total_xp) values ($1, 99999)", [bob]));
+check("Nobody can insert XP transactions", await fails(carol, "insert into xp_transactions (user_id, action, amount, source_key, label) values ($1, 'task_complete', 999, 'x', 'x')", [carol]));
+check("Nobody can delete XP transactions", await fails(carol, "delete from xp_transactions"));
+check("Nobody can grant their own achievement", await fails(bob, "insert into user_achievements (user_id, achievement) values ($1, 'early_bird')", [bob]));
+check("Nobody can call the XP award function", await fails(carol, "select award_xp($1, 'task_complete', 999, 'x', 'x', null, null)", [carol]));
+check("Nobody can edit a focus session", await fails(carol, "update focus_sessions set counted = true"));
+await as(bob, "select award_focus_start($1)", [focusTask]);
+await as(bob, "select award_first_step($1)", [stepTask]);
+check("Bob cannot earn XP from Carol's tasks", (await as(bob, "select * from xp_transactions")).rows.length === 0);
+await as(carol, "update tasks set xp_deadline = now() + interval '900 days', xp_deadline_set_at = now() - interval '900 days' where id = $1", [focusTask]);
+check("Nobody can edit a deadline snapshot", (await as(carol, "select xp_deadline from tasks where id = $1", [focusTask])).rows[0].xp_deadline === null);
+
+for (let i = 0; i < 25; i += 1) await complete(bob, await newTask(bob, `Bulk ${i}`));
+check("Task completion XP stops at the daily limit", (await rewards(bob, "task_complete")).length === 20);
+
 console.log(failures === 0 ? "\nAll RLS checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

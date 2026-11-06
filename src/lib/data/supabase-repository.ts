@@ -2,7 +2,7 @@
 
 import { getBrowserSupabase } from "../supabase/client";
 import type { Streak } from "../types";
-import { keyColumn, type Repository, type Row, type TableName } from "./repository";
+import { RepositoryError, keyColumn, type Repository, type Row, type TableName } from "./repository";
 
 export async function createSupabaseRepository(): Promise<Repository | null> {
   const supabase = getBrowserSupabase();
@@ -10,8 +10,8 @@ export async function createSupabaseRepository(): Promise<Repository | null> {
   const user = data.user;
   if (!user) return null;
 
-  function fail(action: string, error: { message: string } | null): never {
-    throw new Error(`Could not ${action}: ${error?.message ?? "unknown error"}`);
+  function fail(action: string, error: { message: string; code?: string } | null): never {
+    throw new RepositoryError(`Could not ${action}: ${error?.message ?? "unknown error"}`, error?.code);
   }
 
   return {
@@ -22,7 +22,11 @@ export async function createSupabaseRepository(): Promise<Repository | null> {
     async list<T>(table: TableName) {
       const query = supabase.from(table).select("*");
       const { data: rows, error } =
-        table === "messages" ? await query.order("created_at", { ascending: true }).limit(200) : await query;
+        table === "messages"
+          ? await query.order("created_at", { ascending: true }).limit(200)
+          : table === "xp_transactions"
+            ? await query.order("created_at", { ascending: false }).limit(50)
+            : await query;
       if (error) fail(`load ${table}`, error);
       return (rows ?? []) as T[];
     },
@@ -88,6 +92,21 @@ export async function createSupabaseRepository(): Promise<Repository | null> {
       const { data: streak, error } = await supabase.rpc("record_workspace_visit");
       if (error) return null;
       return streak as Streak;
+    },
+
+    async claimProgress(action, taskId) {
+      const { error } = await supabase.rpc(action === "focus_start" ? "award_focus_start" : "award_first_step", { p_task: taskId });
+      if (error) fail("record progress", error);
+    },
+
+    async beginFocusSession() {
+      const { error } = await supabase.rpc("begin_focus_session");
+      if (error) fail("record the focus session", error);
+    },
+
+    async finishFocusSession() {
+      const { error } = await supabase.rpc("finish_focus_session");
+      if (error) fail("record the focus session", error);
     },
 
     async signOut() {

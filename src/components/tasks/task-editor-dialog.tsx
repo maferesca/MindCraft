@@ -3,7 +3,7 @@
 import { Pencil } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { taskInputSchema } from "@/lib/schemas";
-import { STATUS_LABELS, formatDeadline, stepsForTask } from "@/lib/task-helpers";
+import { STATUS_LABELS, fallbackTaskBlockId, formatDeadline, stepsForTask, taskBlockIdOf, taskBlockOptions } from "@/lib/task-helpers";
 import type { Task, TaskStatus } from "@/lib/types";
 import { ChecklistEditor } from "../blocks/checklist-editor";
 import { useWorkspaceData } from "../providers/workspace-data";
@@ -17,15 +17,17 @@ export function TaskEditorDialog() {
   const { tasks } = useWorkspaceData();
   if (!taskEditor) return null;
   const task = taskEditor.taskId ? tasks.find((item) => item.id === taskEditor.taskId) ?? null : null;
-  return <TaskEditorForm key={task?.id ?? "new"} task={task} onClose={closeTaskEditor} />;
+  return <TaskEditorForm key={task?.id ?? "new"} task={task} initialTitle={taskEditor.title} initialBlockId={taskEditor.blockId} onClose={closeTaskEditor} />;
 }
 
-function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => void }) {
-  const { createTask, updateTask, deleteTask, restoreTask, ensureProject, projects, steps, addStep, updateStep, deleteStep } = useWorkspaceData();
+function TaskEditorForm({ task, initialTitle = "", initialBlockId, onClose }: { task: Task | null; initialTitle?: string; initialBlockId?: string; onClose: () => void }) {
+  const { blocks, createTask, updateTask, deleteTask, restoreTask, ensureProject, projects, steps, addStep, updateStep, deleteStep } = useWorkspaceData();
   const { announce, notify } = useNotify();
   const projectName = projects.find((project) => project.id === task?.project_id)?.name ?? "";
+  const blockOptions = taskBlockOptions(blocks);
+  const startingBlockId = task ? taskBlockIdOf(task, blocks) : (initialBlockId ?? fallbackTaskBlockId(blocks));
   const [values, setValues] = useState({
-    title: task?.title ?? "",
+    title: task?.title ?? initialTitle.slice(0, 200),
     description: task?.description ?? "",
     expected_result: task?.expected_result ?? "",
     due_date: task?.due_date ?? "",
@@ -33,8 +35,10 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
     project: projectName,
     assignee: task?.assignee ?? "",
     priority: task?.priority ?? "",
+    estimated_minutes: task?.estimated_minutes ? String(task.estimated_minutes) : "",
     source_link: task?.source_link ?? "",
     status: task?.status ?? "todo",
+    block_id: startingBlockId ?? "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   // A deadline only changes through the explicit Edit deadline action.
@@ -45,9 +49,16 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const { project, ...fields } = values;
+    const { project, estimated_minutes, block_id, ...fields } = values;
+    const minutes = estimated_minutes.trim() ? Number(estimated_minutes) : null;
+    // Sent only when it changes, so a database without the column keeps working.
+    const estimate = minutes === (task?.estimated_minutes ?? null) ? {} : { estimated_minutes: minutes };
     const parsed = taskInputSchema.safeParse({
       ...fields,
+      ...estimate,
+      // Unchanged blocks stay as they are, so a task with no block keeps following the fallback.
+      ...(block_id && block_id !== startingBlockId ? { block_id } : {}),
+      ...(!task && block_id ? { block_id } : {}),
       due_date: values.due_date || null,
       due_time: values.due_date && values.due_time ? values.due_time : null,
       priority: values.priority || null,
@@ -82,13 +93,13 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
     <Modal open onOpenChange={(open) => !open && onClose()} title={task ? "Task details" : "Add task"} description={task ? undefined : "Only the title is required."} wide>
       <form onSubmit={handleSubmit} noValidate className="grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
-          <TextField label="Title" value={values.title} onChange={set("title")} error={errors.title} maxLength={200} autoFocus />
+          <TextField label="Title" placeholder="Start with an action, such as Draft the budget summary" value={values.title} onChange={set("title")} error={errors.title} maxLength={200} autoFocus />
         </div>
         <div className="md:col-span-2">
           <TextAreaField label="Instructions" optional value={values.description} onChange={set("description")} maxLength={4000} />
         </div>
         <div className="md:col-span-2">
-          <TextField label="Expected deliverable" optional value={values.expected_result} onChange={set("expected_result")} maxLength={1000} />
+          <TextField label="Expected output" optional placeholder="What will exist when this is done" value={values.expected_result} onChange={set("expected_result")} maxLength={1000} />
         </div>
 
         {editingDeadline ? (
@@ -121,6 +132,16 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
             </option>
           ))}
         </SelectField>
+        {blockOptions.length > 1 ? (
+          <SelectField label="Task block" value={values.block_id} onChange={set("block_id")}>
+            {blockOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </SelectField>
+        ) : null}
+        <TextField label="Estimated minutes" optional type="number" min={1} max={600} step={1} value={values.estimated_minutes} error={errors.estimated_minutes} onChange={set("estimated_minutes")} />
         <TextField label="Project" optional list="task-project-options" value={values.project} maxLength={120} onChange={set("project")} />
         <datalist id="task-project-options">
           {projects.map((project) => (
@@ -129,7 +150,7 @@ function TaskEditorForm({ task, onClose }: { task: Task | null; onClose: () => v
         </datalist>
         <TextField label="Assignee" optional value={values.assignee} maxLength={120} onChange={set("assignee")} />
         <div className="md:col-span-2">
-          <TextField label="Source link" optional type="url" placeholder="https://…" value={values.source_link} onChange={set("source_link")} maxLength={1000} />
+          <TextField label="Source link" optional type="url" placeholder="https://…" value={values.source_link} error={errors.source_link} onChange={set("source_link")} maxLength={1000} />
         </div>
 
         {task ? (

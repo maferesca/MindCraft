@@ -19,7 +19,7 @@ export function BlockContent({ block }: { block: WorkspaceBlock }) {
     case "next_step":
       return <TaskGuideBlock block={block} />;
     case "focus_timer":
-      return <FocusTimerBlock />;
+      return <FocusTimerBlock block={block} />;
     case "notes":
       return <NotesBlock block={block} />;
     case "resources":

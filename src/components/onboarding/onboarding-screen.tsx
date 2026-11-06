@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { BLOCK_DEFINITIONS, BLOCK_ORDER } from "@/lib/blocks";
+import { catalogItemFor } from "@/lib/block-catalog";
+import { BLOCK_ORDER } from "@/lib/blocks";
 import { DEFAULT_PREFERENCES } from "@/lib/preferences";
 import type { BlockType } from "@/lib/types";
 import { Wordmark } from "../brand/brand-mark";
@@ -132,7 +133,7 @@ function Onboarding() {
                 <h1 id="step-heading" className="text-2xl font-bold">
                   How do you like to work?
                 </h1>
-                <p className="mc-hint mb-4 mt-1">Your answers help the assistant suggest what fits you. You can change them later.</p>
+                <p className="mc-hint mb-4 mt-1">Each answer changes how the assistant helps you. You can change them at any time in Settings.</p>
                 <WorkStyleFields value={preferences} onChange={updatePreferences} />
               </>
             ) : null}
@@ -141,13 +142,17 @@ function Onboarding() {
                 <h1 id="step-heading" className="text-2xl font-bold">
                   Which tools might help?
                 </h1>
-                <p className="mc-hint mb-4 mt-1">Nothing is added until you confirm.</p>
+                <p className="mc-hint mb-4 mt-1">Your choices become a suggested starter layout. Nothing is added to your workspace until you confirm it.</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {BLOCK_ORDER.map((type) => (
-                    <label key={type} className={`flex items-center gap-3 rounded-xl border-2 p-3 ${preferences.preferredTools.includes(type) ? "border-primary" : "border-border"}`}>
-                      <input type="checkbox" className="h-5 w-5" checked={preferences.preferredTools.includes(type)} onChange={() => toggleTool(type)} />
+                    <label key={type} className={`flex items-start gap-3 rounded-xl border-2 p-3 ${preferences.preferredTools.includes(type) ? "border-primary" : "border-border"}`}>
+                      <input type="checkbox" className="mt-1 h-5 w-5 shrink-0" checked={preferences.preferredTools.includes(type)} onChange={() => toggleTool(type)} />
                       <BlockTile type={type} size={36} />
-                      <span className="font-semibold">{BLOCK_DEFINITIONS[type].label}</span>
+                      <span className="min-w-0">
+                        <span className="block font-semibold">{catalogItemFor(type).name}</span>
+                        <span className="block text-sm leading-snug">{catalogItemFor(type).description}</span>
+                        <span className="mc-hint block leading-snug">Example: {catalogItemFor(type).example}</span>
+                      </span>
                     </label>
                   ))}
                 </div>

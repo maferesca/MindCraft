@@ -25,6 +25,10 @@ export interface Task {
   assignee: string | null;
   priority: TaskPriority | null;
   source_link: string | null;
+  // Absent on a database that has not run the task estimates migration yet.
+  estimated_minutes?: number | null;
+  // The task block that holds it. Without one, it appears in the oldest task block.
+  block_id?: string | null;
   status: TaskStatus;
   created_at: string;
   updated_at: string;
@@ -135,6 +139,9 @@ export interface WorkspaceBlock {
   layouts: Partial<Record<Breakpoint, GridPosition>>;
   mobile_order: number;
   hidden: boolean;
+  // Blocks with the same group_id form one work group.
+  group_id?: string | null;
+  group_title?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -159,6 +166,22 @@ export interface Streak {
   current_streak: number;
   best_streak: number;
   last_visit_date: string | null;
+}
+
+export type XpAction = "focus_start" | "task_complete" | "early_bonus" | "blocker_resolved" | "first_step";
+export type Achievement = "first_step" | "focus_explorer" | "problem_solver" | "early_bird" | "task_builder";
+
+export interface XpTransaction {
+  id: string;
+  action: XpAction;
+  amount: number;
+  label: string;
+  created_at: string;
+}
+
+export interface UserAchievement {
+  achievement: Achievement;
+  unlocked_at: string;
 }
 
 export interface NotificationPreferences {

@@ -4,7 +4,8 @@ import { browserTimezone, localDateString, nextStreak } from "../dates";
 import { buildSampleData } from "../demo/sample-data";
 import type { Streak } from "../types";
 import { DEMO_COOKIE } from "../supabase/config";
-import { keyColumn, type Repository, type Row, type TableName } from "./repository";
+import { beginLocalFocusSession, finishLocalFocusSession, rewardCompletedTask, rewardFirstStep, rewardFocusStart, rewardResolvedBlocker, snapshotDeadline } from "./local-progress";
+import { RepositoryError, keyColumn, type Repository, type Row, type TableName } from "./repository";
 
 const STORAGE_KEY = "mindcraft-demo-v1";
 const DEMO_USER_ID = "00000000-0000-4000-8000-000000000001";
@@ -83,6 +84,9 @@ export function createLocalRepository(): Repository | null {
     async insert<T>(table: TableName, row: Row) {
       const now = new Date().toISOString();
       const record = { id: crypto.randomUUID(), created_at: now, updated_at: now, ...row, user_id: DEMO_USER_ID };
+      // Mirrors the primary key, so the demo also rejects a second copy.
+      if (rows(table).some((item) => item.id === record.id)) throw new RepositoryError(`Could not save to ${table}: duplicate id`, "23505");
+      if (table === "tasks") snapshotDeadline(record);
       rows(table).push(record);
       save(database);
       return structuredClone(record) as T;
@@ -92,7 +96,13 @@ export function createLocalRepository(): Repository | null {
       const column = keyColumn(table);
       const record = rows(table).find((item) => item[column] === key);
       if (!record) throw new Error(`Could not update ${table}: record not found`);
+      const before = { ...record };
       Object.assign(record, patch, { updated_at: new Date().toISOString() });
+      if (table === "tasks") {
+        snapshotDeadline(record, before);
+        if (record.status === "done" && before.status !== "done") rewardCompletedTask(rows, record);
+      }
+      if (table === "check_ins" && record.kind === "help" && record.help_status === "resolved" && before.help_status !== "resolved") rewardResolvedBlocker(rows, record);
       save(database);
       return structuredClone(record) as T;
     },
@@ -127,6 +137,22 @@ export function createLocalRepository(): Repository | null {
       database.streak = nextStreak(database.streak, localDateString(timezone));
       save(database);
       return database.streak;
+    },
+
+    async claimProgress(action, taskId) {
+      if (action === "focus_start") rewardFocusStart(rows, taskId);
+      else rewardFirstStep(rows, taskId);
+      save(database);
+    },
+
+    async beginFocusSession() {
+      beginLocalFocusSession(rows);
+      save(database);
+    },
+
+    async finishFocusSession() {
+      finishLocalFocusSession(rows);
+      save(database);
     },
 
     async signOut() {

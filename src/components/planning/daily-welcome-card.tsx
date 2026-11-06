@@ -13,7 +13,7 @@ const DISMISSED_KEY = "mindcraft-welcome-dismissed";
 // Small, dismissible card on the first visit of each local day.
 // It never blocks the workspace and is not a required daily interview.
 export function DailyWelcomeCard() {
-  const { preferences, tasks } = useWorkspaceData();
+  const { preferences, profile, tasks } = useWorkspaceData();
   const { openPlanning, openAssistant, setSearchOpen, focusTaskId } = useWorkspaceUI();
   const today = useToday();
   const [visible, setVisible] = useState(false);
@@ -41,6 +41,8 @@ export function DailyWelcomeCard() {
 
   if (!visible) return null;
 
+  const name = profile?.display_name?.trim();
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!text.trim()) return;
@@ -66,7 +68,7 @@ export function DailyWelcomeCard() {
     <section aria-labelledby="welcome-heading" className="mc-card mb-5 p-4">
       <div className="flex items-start gap-2">
         <h2 id="welcome-heading" className="flex-1 text-lg font-bold">
-          What do you have in mind today?
+          {name ? `Hi ${name}, what do you have in mind today?` : "What do you have in mind today?"}
         </h2>
         <IconButton size="sm" label="Dismiss for today" icon={<X size={18} />} onClick={dismiss} />
       </div>

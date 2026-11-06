@@ -1,21 +1,42 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 
 interface Toast {
   id: number;
   message: string;
-  tone: "info" | "error";
+  // Extra lines shown under the message, such as the rewards of a completed task.
+  details?: string[];
+  tone: "info" | "error" | "encouragement";
   action?: { label: string; onClick: () => void };
+  group?: string;
+}
+
+interface NotifyOptions {
+  details?: string[];
+  tone?: Toast["tone"];
+  action?: Toast["action"];
+  durationMs?: number;
+  // Lets a whole kind of message be removed at once.
+  group?: string;
+  // For optional messages: stay silent while another message is showing.
+  onlyIfQuiet?: boolean;
 }
 
 interface NotifyContextValue {
-  notify: (message: string, options?: { tone?: Toast["tone"]; action?: Toast["action"]; durationMs?: number }) => void;
+  notify: (message: string, options?: NotifyOptions) => void;
   announce: (message: string) => void;
+  dismissGroup: (group: string) => void;
 }
 
 const NotifyContext = createContext<NotifyContextValue | null>(null);
+
+const TOAST_STYLES: Record<Toast["tone"], string> = {
+  info: "px-4 py-2",
+  error: "border-2 border-danger px-4 py-2",
+  encouragement: "border-2 border-primary bg-primary-soft px-5 py-3",
+};
 
 // Toasts for visible feedback (with optional Undo) plus a polite live region
 // so screen readers hear meaningful results such as "Task added".
@@ -23,8 +44,16 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [liveMessage, setLiveMessage] = useState("");
   const nextId = useRef(1);
+  // The latest list, for deciding before React has rendered the last change.
+  const toastsRef = useRef<Toast[]>([]);
 
-  const dismiss = useCallback((id: number) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
+  const updateToasts = useCallback((next: Toast[]) => {
+    toastsRef.current = next;
+    setToasts(next);
+  }, []);
+
+  const dismiss = useCallback((id: number) => updateToasts(toastsRef.current.filter((toast) => toast.id !== id)), [updateToasts]);
+  const dismissGroup = useCallback((group: string) => updateToasts(toastsRef.current.filter((toast) => toast.group !== group)), [updateToasts]);
 
   const announce = useCallback((message: string) => {
     setLiveMessage("");
@@ -33,15 +62,16 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   const notify = useCallback<NotifyContextValue["notify"]>(
     (message, options = {}) => {
+      if (options.onlyIfQuiet && toastsRef.current.length) return;
       const id = nextId.current++;
-      setToasts((current) => [...current.slice(-2), { id, message, tone: options.tone ?? "info", action: options.action }]);
-      announce(message);
+      updateToasts([...toastsRef.current.slice(-2), { id, message, details: options.details, tone: options.tone ?? "info", action: options.action, group: options.group }]);
+      announce([message, ...(options.details ?? [])].join(". "));
       window.setTimeout(() => dismiss(id), options.durationMs ?? (options.action ? 8000 : 5000));
     },
-    [announce, dismiss],
+    [announce, dismiss, updateToasts],
   );
 
-  const value = useMemo(() => ({ notify, announce }), [notify, announce]);
+  const value = useMemo(() => ({ notify, announce, dismissGroup }), [notify, announce, dismissGroup]);
 
   return (
     <NotifyContext.Provider value={value}>
@@ -53,9 +83,17 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`mc-card pointer-events-auto flex max-w-lg items-center gap-3 px-4 py-2 ${toast.tone === "error" ? "border-2 border-danger" : ""}`}
+            className={`mc-card pointer-events-auto flex max-w-lg items-center gap-3 shadow-lg ${TOAST_STYLES[toast.tone]}`}
           >
-            <p className={toast.tone === "error" ? "font-semibold text-danger" : ""}>{toast.message}</p>
+            {toast.tone === "encouragement" ? <Sparkles size={20} className="shrink-0 text-primary" aria-hidden="true" /> : null}
+            <div className="min-w-0">
+              <p className={toast.tone === "error" ? "font-semibold text-danger" : toast.tone === "encouragement" ? "text-lg font-semibold" : "font-medium"}>{toast.message}</p>
+              {toast.details?.map((line) => (
+                <p key={line} className="text-sm">
+                  {line}
+                </p>
+              ))}
+            </div>
             {toast.action ? (
               <button
                 type="button"

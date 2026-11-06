@@ -79,18 +79,40 @@ function NoteEditor({ note, textSize, onTextSize, onBack }: { note: Note; textSi
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [mode, setMode] = useState<"edit" | "preview">(/^\s*- \[/m.test(note.body) ? "preview" : "edit");
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  // Edits still waiting for the autosave delay, kept so leaving cannot drop them.
+  const pendingRef = useRef<Partial<Note> | null>(null);
 
   // Autosave shortly after typing stops.
   useEffect(() => {
     const unchanged = title.trim() === (note.title ?? "") && body === note.body && link === linkKey(note);
-    if (unchanged) return;
+    if (unchanged) {
+      pendingRef.current = null;
+      return;
+    }
+    const patch = { title: title.trim() || null, body, ...parseLink(link) };
+    pendingRef.current = patch;
     const timer = window.setTimeout(async () => {
+      pendingRef.current = null;
       setSaveState("saving");
-      const ok = await updateNote(note.id, { title: title.trim() || null, body, ...parseLink(link) });
+      const ok = await updateNote(note.id, patch);
       setSaveState(ok ? "saved" : "error");
     }, 600);
     return () => window.clearTimeout(timer);
   }, [title, body, link, note, updateNote, attempt]);
+
+  // Saves at once when the editor closes or the page goes away mid-delay.
+  useEffect(() => {
+    const flush = () => {
+      if (!pendingRef.current) return;
+      void updateNote(note.id, pendingRef.current);
+      pendingRef.current = null;
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [note.id, updateNote]);
 
   function insertPrefix(prefix: string) {
     const area = bodyRef.current;
@@ -165,6 +187,7 @@ function NoteEditor({ note, textSize, onTextSize, onBack }: { note: Note; textSi
               type="button"
               className="mc-btn mc-btn-danger"
               onClick={async () => {
+                pendingRef.current = null;
                 const deleted = await deleteNote(note.id);
                 if (deleted) {
                   announce("Note deleted.");

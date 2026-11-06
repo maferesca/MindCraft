@@ -4,6 +4,17 @@ import type { Streak } from "../types";
 // Postgres (protected by RLS); the demo implementation keeps fictional data
 // in this browser's localStorage so the app can be explored without an account.
 
+// Keeps the database error code, so callers can tell a duplicate from a failure.
+export class RepositoryError extends Error {
+  constructor(
+    message: string,
+    public code?: string,
+  ) {
+    super(message);
+    this.name = "RepositoryError";
+  }
+}
+
 export type TableName =
   | "profiles"
   | "preferences"
@@ -19,10 +30,14 @@ export type TableName =
   | "notes"
   | "calendar_events"
   | "conversations"
-  | "messages";
+  | "messages"
+  | "xp_transactions"
+  | "user_progress"
+  | "user_achievements"
+  | "focus_sessions";
 
 // Tables with one row per user are keyed by user_id instead of id.
-export const USER_KEYED_TABLES: TableName[] = ["profiles", "preferences", "notification_preferences"];
+export const USER_KEYED_TABLES: TableName[] = ["profiles", "preferences", "notification_preferences", "user_progress"];
 
 export type Row = Record<string, unknown>;
 
@@ -37,6 +52,10 @@ export interface Repository {
   removeWhere(table: TableName, column: string, value: string): Promise<void>;
   getStreak(): Promise<Streak | null>;
   recordVisit(timezone: string): Promise<Streak | null>;
+  // These ask for a reward; the database checks the facts and decides.
+  claimProgress(action: "focus_start" | "first_step", taskId: string): Promise<void>;
+  beginFocusSession(): Promise<void>;
+  finishFocusSession(): Promise<void>;
   signOut(): Promise<void>;
 }
 

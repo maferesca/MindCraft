@@ -2,11 +2,14 @@
 
 import { ExternalLink, LogOut, Sparkles, Timer } from "lucide-react";
 import { useState } from "react";
+import { isHttpUrl } from "@/lib/schemas";
 import { openTasks } from "@/lib/task-helpers";
 import { CurrentStep } from "../blocks/next-step-block";
 import { FocusTimerBlock } from "../blocks/focus-timer-block";
+import { TaskBlockers } from "../blocks/task-blockers";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
+import { StartSupport } from "./start-support";
 
 // A temporary, simpler view of one task. It replaces the grid on screen only;
 // the saved layout is untouched, so exiting shows the workspace exactly as before.
@@ -16,12 +19,21 @@ export function FocusMode() {
   const [showTimer, setShowTimer] = useState(false);
   const task = tasks.find((item) => item.id === focusTaskId) ?? null;
   const linkedNotes = task ? notes.filter((note) => note.task_id === task.id) : [];
+  // Links saved before validation existed may not be real web addresses.
+  const sourceLink = task?.source_link && isHttpUrl(task.source_link) ? task.source_link : null;
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-5 py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-bold uppercase tracking-wide text-text-muted">Focus Mode</h2>
-        <button type="button" className="mc-btn mc-btn-secondary" onClick={exitFocus}>
+        <button
+          type="button"
+          className="mc-btn mc-btn-secondary"
+          onClick={() => {
+            exitFocus();
+            document.getElementById("main")?.focus({ preventScroll: true });
+          }}
+        >
           <LogOut size={16} aria-hidden="true" /> Exit Focus Mode
         </button>
       </div>
@@ -49,13 +61,15 @@ export function FocusMode() {
               </p>
             ) : null}
             <CurrentStep task={task} />
-            {task.source_link || linkedNotes.length ? (
+            <StartSupport task={task} onShowTimer={() => setShowTimer(true)} />
+            <TaskBlockers task={task} />
+            {sourceLink || linkedNotes.length ? (
               <div>
                 <h4 className="font-semibold">Resources</h4>
                 <ul className="mt-1 flex flex-col gap-1">
-                  {task.source_link ? (
+                  {sourceLink ? (
                     <li>
-                      <a href={task.source_link} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 text-primary underline underline-offset-4">
+                      <a href={sourceLink} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 text-primary underline underline-offset-4">
                         Source link <ExternalLink size={14} aria-hidden="true" />
                         <span className="sr-only">(opens in a new tab)</span>
                       </a>

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ApiError, GoogleGenAI } from "@google/genai";
+import { completionReserve } from "./completion-reserve";
 import { getGeminiConfig } from "./server-env";
 
 type ErrorCode = "not_configured" | "rate_limited" | "timeout" | "model_unavailable" | "invalid_output" | "provider_error";
@@ -29,6 +30,18 @@ function omitOptionalNulls(value: unknown, schema: JsonSchema): unknown {
     return result;
   }
   return value;
+}
+
+// The rules already explain each field. Groq receives the schema as prompt text,
+// so its descriptions would spend the per-minute token allowance twice.
+function withoutDescriptions(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutDescriptions);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key, child]) => !(key === "description" && typeof child === "string"))
+      .map(([key, child]) => [key, withoutDescriptions(child)]),
+  );
 }
 
 // Only log provider metadata. Error messages can include generated content.
@@ -170,7 +183,7 @@ async function generateGroq(params: RequestParams): Promise<string> {
     const jsonMode = params.config?.responseMimeType === "application/json";
     const schema = params.config?.responseJsonSchema as JsonSchema | undefined;
     if (jsonMode) {
-      systemText += `\n\nResponse format\nReturn only one JSON object with a nonempty reply string, an optional question string, and a proposals array. Use proposals: [] when a plain answer is enough. Omit optional fields when unknown; never invent dates, priorities, or preferences. Keep at most three proposals. Do not add Markdown fences or reasoning text. Follow this application schema for all field names and proposal shapes:\n${JSON.stringify(schema ?? { type: "object", required: ["reply", "proposals"] })}\nExample for a greeting: {"reply":"Hello, how can I help with your work?","proposals":[]}`;
+      systemText += `\n\nResponse format\nReturn only one JSON object with a nonempty reply string, an optional question string, and a proposals array. Use proposals: [] when a plain answer is enough. Omit optional fields when unknown; never invent dates, priorities, or preferences. Keep at most three proposals. Do not add Markdown fences or reasoning text. Follow this application schema for all field names and proposal shapes:\n${JSON.stringify(withoutDescriptions(schema ?? { type: "object", required: ["reply", "proposals"] }))}\nExample for a greeting: {"reply":"Hello, how can I help with your work?","proposals":[]}`;
     }
     const messages = [
       ...(systemText ? [{ role: "system", content: systemText }] : []),
@@ -183,8 +196,11 @@ async function generateGroq(params: RequestParams): Promise<string> {
       model: process.env.GROQ_MODEL || "openai/gpt-oss-20b",
       reasoning_effort: "low",
       temperature: params.config?.temperature ?? 0.4,
-      // Reasoning consumes completion tokens too. Keep a bounded allowance.
-      max_completion_tokens: Math.max(3000, (params.config?.maxOutputTokens ?? 1500) + 1500),
+      // Reasoning consumes completion tokens too, so this includes room for it.
+      max_completion_tokens: completionReserve(
+        messages.reduce((total, message) => total + message.content.length, 0),
+        Number(process.env.GROQ_TOKENS_PER_MINUTE) || 8000,
+      ),
     };
     let lastFormatError: AiUnavailableError | null = null;
     // Some generations fail the provider's JSON validator. Retry that case

@@ -19,6 +19,7 @@ const SECTIONS: Array<[SettingsSection, string]> = [
   ["appearance", "Appearance and reading"],
   ["workspace", "Workspace"],
   ["notifications", "Notifications"],
+  ["rewards", "Motivation & Rewards"],
   ["ai", "AI and privacy"],
   ["account", "Account"],
 ];
@@ -51,6 +52,9 @@ export function SettingsDialog() {
         </Tabs.Content>
         <Tabs.Content value="notifications">
           <NotificationsSection />
+        </Tabs.Content>
+        <Tabs.Content value="rewards">
+          <RewardsSection />
         </Tabs.Content>
         <Tabs.Content value="ai">
           <AiSection />
@@ -117,6 +121,7 @@ function AppearanceSection() {
 
 function WorkspaceSection() {
   const { preferences, updatePreferences, workspace, renameWorkspace, resetLayout } = useWorkspaceData();
+  const { closeSettings, setGuideStep } = useWorkspaceUI();
   const { announce } = useNotify();
   const [name, setName] = useState(workspace?.name ?? "My workspace");
   const toggleTool = (type: BlockType) =>
@@ -174,17 +179,47 @@ function WorkspaceSection() {
         />
       </div>
 
-      <WorkStyleFields value={preferences} onChange={updatePreferences} fields={["planningStyle", "focusTime", "startHelp"]} />
+      <WorkStyleFields value={preferences} onChange={updatePreferences} fields={["focusTime", "startHelp"]} />
 
       <div className="flex flex-col gap-2">
         <label className="flex items-center gap-2">
           <input type="checkbox" className="h-5 w-5" checked={preferences.dailyWelcome} onChange={(event) => updatePreferences({ dailyWelcome: event.target.checked })} />
           Show the daily welcome card
         </label>
+        <div>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              className="h-5 w-5"
+              aria-describedby="motivational-messages-hint"
+              checked={preferences.motivationalMessages}
+              onChange={(event) => updatePreferences({ motivationalMessages: event.target.checked })}
+            />
+            Motivational messages
+          </label>
+          <p id="motivational-messages-hint" className="mc-hint pl-7">
+            Show daily encouragement and messages after tasks and focus sessions.
+          </p>
+        </div>
         <label className="flex items-center gap-2">
           <input type="checkbox" className="h-5 w-5" checked={preferences.showStreak} onChange={(event) => updatePreferences({ showStreak: event.target.checked })} />
           Show the visit streak in the header
         </label>
+      </div>
+
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="font-bold">Workspace guide</h3>
+        <p className="mc-hint mt-1">Shows how to open the inventory, add blocks, move or resize them, and save.</p>
+        <button
+          type="button"
+          className="mc-btn mc-btn-secondary mt-3"
+          onClick={() => {
+            closeSettings();
+            setGuideStep(0);
+          }}
+        >
+          Show the guide
+        </button>
       </div>
 
       <div className="rounded-xl border border-border p-4">
@@ -264,6 +299,28 @@ function NotificationsSection() {
   );
 }
 
+function RewardsSection() {
+  const { preferences, updatePreferences } = useWorkspaceData();
+  const off = !preferences.rewardsEnabled;
+  return (
+    <div className="flex max-w-2xl flex-col gap-3">
+      <p className="mc-hint">Turning rewards off only hides them. Your XP, level, and achievements stay saved, and they return when you turn rewards on.</p>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" className="h-5 w-5" checked={preferences.rewardsEnabled} onChange={(event) => updatePreferences({ rewardsEnabled: event.target.checked })} />
+        Enable rewards
+      </label>
+      <label className={`flex items-center gap-2 ${off ? "text-text-muted" : ""}`}>
+        <input type="checkbox" className="h-5 w-5" disabled={off} checked={preferences.xpNotifications} onChange={(event) => updatePreferences({ xpNotifications: event.target.checked })} />
+        Show XP notifications
+      </label>
+      <label className={`flex items-center gap-2 ${off ? "text-text-muted" : ""}`}>
+        <input type="checkbox" className="h-5 w-5" disabled={off} checked={preferences.levelUpMessages} onChange={(event) => updatePreferences({ levelUpMessages: event.target.checked })} />
+        Show level-up celebrations
+      </label>
+    </div>
+  );
+}
+
 function AiSection() {
   const { preferences, updatePreferences, clearChat, messages } = useWorkspaceData();
   const { announce } = useNotify();
@@ -278,6 +335,7 @@ function AiSection() {
           onChange={(value) => updatePreferences({ responseDetail: value as Preferences["responseDetail"] })}
         />
       </div>
+      <WorkStyleFields value={preferences} onChange={updatePreferences} fields={["planningStyle", "communicationStyle", "taskPresentation", "workMinutes"]} />
       <SelectField label="Assistant language" value={preferences.language} onChange={(event) => updatePreferences({ language: event.target.value })}>
         <option value="auto">Same as my message</option>
         <option value="English">English</option>
@@ -289,17 +347,35 @@ function AiSection() {
         <option value="Portuguese">Portuguese</option>
       </SelectField>
 
+      <div>
+        <button
+          type="button"
+          className="mc-btn mc-btn-secondary self-start"
+          onClick={() => {
+            const { responseDetail, planningStyle, communicationStyle, taskPresentation, focusTime, startHelp, workMinutes, language } = DEFAULT_PREFERENCES;
+            updatePreferences({ responseDetail, planningStyle, communicationStyle, taskPresentation, focusTime, startHelp, workMinutes, language });
+            announce("Assistant preferences cleared.");
+          }}
+        >
+          Clear my assistant preferences
+        </button>
+        <p className="mc-hint mt-1">Your name is in Profile, where you can change or remove it.</p>
+      </div>
+
       <section className="rounded-xl border border-border p-4">
         <h3 className="font-bold">What is sent to the AI provider</h3>
         <p className="mt-1">
-          The assistant uses Google&apos;s Gemini API, called from the MindCraft server. When you ask for help, MindCraft sends only:
+          The assistant uses Google&apos;s Gemini API or Groq, called from the MindCraft server. One is the main provider, and the other can answer if it
+          is unavailable, so a request may reach both. When you ask for help, MindCraft sends only:
         </p>
         <ul className="mt-2 list-disc pl-5">
           <li>your message and the last few messages of this chat</li>
-          <li>the selected task (title, description, expected result, deadline, priority, status, steps)</li>
-          <li>the titles, status, and deadlines of your other open tasks</li>
-          <li>which block types are in your workspace</li>
-          <li>your response detail, language, planning style, and how you said you like to work</li>
+          <li>your display name, so the assistant can call you by it</li>
+          <li>the selected task (title, description, expected result, deadline, priority, status, steps, and open missing information)</li>
+          <li>the titles, status, and deadlines of your other open tasks, and the names of your task blocks</li>
+          <li>only if you open the assistant for a work group: its title, block names, tasks, and the notes linked to those tasks</li>
+          <li>which block types are in your workspace, including hidden ones</li>
+          <li>your response detail, language, assistance level, communication style, task presentation, session length, and how you said you like to work</li>
         </ul>
         <p className="mt-2">
           Notes, calendar events, your email, and your other settings are not sent. Voice recordings are sent once to be turned into text and are

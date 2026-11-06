@@ -24,6 +24,9 @@ interface ChecklistEditorProps {
 export function ChecklistEditor({ items, noun, onAdd, onChange, onDelete }: ChecklistEditorProps) {
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
+  // Keeps keyboard focus in place when a saved row remounts or Add returns.
+  const [refocusId, setRefocusId] = useState<string | null>(null);
+  const [refocusAdd, setRefocusAdd] = useState(false);
 
   function saveNew() {
     const value = text.trim();
@@ -55,6 +58,8 @@ export function ChecklistEditor({ items, noun, onAdd, onChange, onDelete }: Chec
               />
               <input
                 key={item.text}
+                autoFocus={refocusId === item.id}
+                data-local-escape
                 aria-label={`${noun} ${index + 1} text`}
                 className={`mc-input min-h-9 min-w-0 flex-1 py-1 ${item.done ? "text-text-muted line-through" : ""}`}
                 defaultValue={item.text}
@@ -64,9 +69,39 @@ export function ChecklistEditor({ items, noun, onAdd, onChange, onDelete }: Chec
                   if (value && value !== item.text) onChange(item.id, { text: value });
                   else event.target.value = item.text;
                 }}
+                onKeyDown={(event) => {
+                  // This row may sit inside a form: Enter saves the row, not the form.
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    const value = event.currentTarget.value.trim();
+                    if (value && value !== item.text) {
+                      setRefocusId(item.id);
+                      onChange(item.id, { text: value });
+                    } else {
+                      event.currentTarget.value = item.text;
+                    }
+                  }
+                  if (event.key === "Escape") event.currentTarget.value = item.text;
+                }}
               />
-              <IconButton size="sm" label={`Move ${noun} ${index + 1} up`} icon={<ArrowUp size={15} />} disabled={index === 0} onClick={() => move(index, -1)} />
-              <IconButton size="sm" label={`Move ${noun} ${index + 1} down`} icon={<ArrowDown size={15} />} disabled={index === items.length - 1} onClick={() => move(index, 1)} />
+              <IconButton
+                size="sm"
+                label={`Move ${noun} ${index + 1} up`}
+                icon={<ArrowUp size={15} />}
+                aria-disabled={index === 0}
+                onClick={() => {
+                  if (index > 0) move(index, -1);
+                }}
+              />
+              <IconButton
+                size="sm"
+                label={`Move ${noun} ${index + 1} down`}
+                icon={<ArrowDown size={15} />}
+                aria-disabled={index === items.length - 1}
+                onClick={() => {
+                  if (index < items.length - 1) move(index, 1);
+                }}
+              />
               <IconButton size="sm" label={`Delete ${noun} ${index + 1}`} icon={<Trash2 size={15} />} onClick={() => onDelete(item.id)} />
             </li>
           ))}
@@ -75,6 +110,7 @@ export function ChecklistEditor({ items, noun, onAdd, onChange, onDelete }: Chec
       {adding ? (
         <input
           autoFocus
+          data-local-escape
           aria-label={`New ${noun}`}
           placeholder={`Write the ${noun}…`}
           className="mc-input min-h-9 py-1"
@@ -89,14 +125,14 @@ export function ChecklistEditor({ items, noun, onAdd, onChange, onDelete }: Chec
               setAdding(true);
             }
             if (event.key === "Escape") {
-              event.stopPropagation();
               setText("");
               setAdding(false);
+              setRefocusAdd(true);
             }
           }}
         />
       ) : (
-        <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm self-start" onClick={() => setAdding(true)}>
+        <button type="button" autoFocus={refocusAdd} className="mc-btn mc-btn-secondary mc-btn-sm self-start" onClick={() => setAdding(true)}>
           <Plus size={14} aria-hidden="true" /> Add {noun}
         </button>
       )}

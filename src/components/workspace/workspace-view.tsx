@@ -1,9 +1,10 @@
 "use client";
 
-import { Redo2, Save, Undo2, X } from "lucide-react";
+import { CircleHelp, Redo2, Save, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useContainerWidth, type Layout } from "react-grid-layout";
 import { BLOCK_DEFINITIONS, breakpointForWidth } from "@/lib/blocks";
+import { joinGroup, leaveGroup, moveGroup, removeGroup, renameGroup, workGroups } from "@/lib/groups";
 import { addBlockToDraft, applyGridLayout, moveInOrder, nudgeBlock, resizeBlock, withPositions } from "@/lib/layout-edit";
 import type { BlockType, WorkspaceBlock } from "@/lib/types";
 import { useWorkspaceData } from "../providers/workspace-data";
@@ -14,6 +15,7 @@ import type { CreativeActions } from "./block-frame";
 import { EmptyState } from "./empty-state";
 import { InventoryDock } from "./inventory-dock";
 import { WorkspaceGrid } from "./workspace-grid";
+import { WorkspaceGuide } from "./workspace-guide";
 
 interface History {
   past: WorkspaceBlock[][];
@@ -23,7 +25,7 @@ interface History {
 
 export function WorkspaceView() {
   const { blocks, workspace, saveLayout, draftConfigs } = useWorkspaceData();
-  const { creativeMode, setCreativeMode } = useWorkspaceUI();
+  const { creativeMode, setCreativeMode, setGuideStep } = useWorkspaceUI();
   const { announce, notify } = useNotify();
   const { width, containerRef, mounted } = useContainerWidth();
   const breakpoint = breakpointForWidth(width || 1200);
@@ -47,15 +49,30 @@ export function WorkspaceView() {
     }
   }, [creativeMode, blocks, announce]);
 
+  // A layout draft lives only in memory, so warn before a reload or close drops it.
+  const hasUnsavedLayout = creativeMode && Boolean(history?.past.length);
+  useEffect(() => {
+    if (!hasUnsavedLayout) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedLayout]);
+
   const commit = useCallback((next: WorkspaceBlock[]) => {
     setHistory((current) => (current && next !== current.present ? { past: [...current.past, current.present], present: next, future: [] } : current));
   }, []);
 
   const draft = history?.present ?? blocks;
   // Block settings save immediately, so a layout draft always shows the current ones.
-  const savedConfig = new Map(blocks.map((block) => [block.id, block.config]));
+  const savedBlocks = new Map(blocks.map((block) => [block.id, block]));
   const shown = creativeMode
-    ? draft.map((block) => ({ ...block, config: savedConfig.get(block.id) ?? { ...block.config, ...draftConfigs[block.id] } }))
+    ? draft.map((block) => {
+        const saved = savedBlocks.get(block.id);
+        const pending = draftConfigs[block.id];
+        return saved
+          ? { ...block, title: saved.title, config: saved.config }
+          : { ...block, title: (pending?.title as string | null | undefined) ?? block.title, config: { ...block.config, ...pending } };
+      })
     : blocks;
   const visibleCount = shown.filter((block) => !block.hidden).length;
   const base = { user_id: workspace?.user_id ?? "", workspace_id: workspace?.id ?? "" };
@@ -68,11 +85,38 @@ export function WorkspaceView() {
     notify(`${BLOCK_DEFINITIONS[type].label} added. Save to keep it.`);
   }
 
+  function groupWith(id: string, targetBlockId: string) {
+    commit(joinGroup(draft, id, targetBlockId, breakpoint));
+    notify("Added to the group. Save to keep it.");
+  }
+
+  const groupActions = creativeMode
+    ? {
+        rename: (groupId: string, title: string) => commit(renameGroup(draft, groupId, title)),
+        remove: (groupId: string) => {
+          commit(removeGroup(draft, groupId));
+          announce("Group removed. Its blocks and their content are unchanged.");
+        },
+      }
+    : null;
+
   function actionsFor(block: WorkspaceBlock, index: number, total: number): CreativeActions | null {
     if (!creativeMode) return null;
     const label = BLOCK_DEFINITIONS[block.block_type].label;
     const gridBreakpoint = breakpoint === "sm" ? null : breakpoint;
+    const groups = workGroups(shown);
+    const single = shown.filter((item) => item.id !== block.id && !item.group_id && !item.hidden);
     return {
+      grouped: Boolean(block.group_id),
+      groupTargets: [
+        ...groups.map((group) => ({ blockId: group.members[0].id, label: group.title })),
+        ...single.map((item) => ({ blockId: item.id, label: `New group with ${item.title || BLOCK_DEFINITIONS[item.block_type].label}` })),
+      ],
+      joinGroup: (targetBlockId) => groupWith(block.id, targetBlockId),
+      leaveGroup: () => {
+        commit(leaveGroup(draft, block.id));
+        announce(`${label} removed from the group. Its content is unchanged.`);
+      },
       isFirst: index === 0,
       isLast: index === total - 1,
       moveEarlier: () => {
@@ -154,6 +198,9 @@ export function WorkspaceView() {
           <p className="mr-auto font-semibold">
             Creative Mode
           </p>
+          <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={() => setGuideStep(1)}>
+            <CircleHelp size={16} aria-hidden="true" /> Guide
+          </button>
           <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={undo} disabled={!history?.past.length}>
             <Undo2 size={16} aria-hidden="true" /> Undo
           </button>
@@ -168,6 +215,8 @@ export function WorkspaceView() {
           </button>
         </div>
       ) : null}
+
+      <WorkspaceGuide />
 
       <div ref={containerRef}>
         {!creativeMode && visibleCount === 0 ? (
@@ -188,9 +237,14 @@ export function WorkspaceView() {
               creative={creativeMode}
               draggingType={draggingType}
               actionsFor={actionsFor}
+              groupActions={groupActions}
               onLayoutCommit={(layout: Layout) => {
                 if (breakpoint === "sm") return;
                 commit(applyGridLayout(withPositions(draft, breakpoint), breakpoint, [...layout]));
+              }}
+              onSnapToGroup={groupWith}
+              onMoveGroup={(groupId, dx, dy) => {
+                if (breakpoint !== "sm") commit(moveGroup(draft, groupId, dx, dy, breakpoint));
               }}
               onDropBlock={(x, y) => {
                 if (draggingType) addBlock(draggingType, { x, y });

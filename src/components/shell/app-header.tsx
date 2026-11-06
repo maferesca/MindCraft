@@ -1,16 +1,19 @@
 "use client";
 
 import { DropdownMenu, Popover } from "radix-ui";
-import { Bell, Blocks, CalendarCheck, Flame, Focus, LogOut, Palette, Shield, SlidersHorizontal, User, UserCog } from "lucide-react";
+import { Bell, Blocks, CalendarCheck, Flame, Focus, LogOut, Palette, Shield, SlidersHorizontal, Star, User, UserCog } from "lucide-react";
 import { BrandMark, Wordmark } from "../brand/brand-mark";
+import { TeamCredit } from "../brand/team-credit";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI, type SettingsSection } from "../providers/workspace-ui";
+import { ProgressIndicator } from "./progress-indicator";
 
 const MENU_ITEMS: Array<{ section: SettingsSection; label: string; icon: typeof User }> = [
   { section: "profile", label: "Profile", icon: User },
   { section: "appearance", label: "Appearance and reading", icon: Palette },
   { section: "workspace", label: "Workspace preferences", icon: SlidersHorizontal },
   { section: "notifications", label: "Notifications", icon: Bell },
+  { section: "rewards", label: "Motivation & Rewards", icon: Star },
   { section: "ai", label: "AI and privacy", icon: Shield },
   { section: "account", label: "Account", icon: UserCog },
 ];
@@ -49,6 +52,10 @@ export function AppHeader() {
               <DropdownMenu.Item className="mc-menu-item" onSelect={() => signOut()}>
                 <LogOut size={16} aria-hidden="true" /> {mode === "demo" ? "Leave demo" : "Sign out"}
               </DropdownMenu.Item>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DropdownMenu.Label className="px-2 py-1">
+                <TeamCredit />
+              </DropdownMenu.Label>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
@@ -65,6 +72,7 @@ export function AppHeader() {
           </span>
           <h1 className="truncate font-semibold">{workspace?.name ?? "My workspace"}</h1>
           <StreakIndicator />
+          <ProgressIndicator />
         </div>
 
         <nav aria-label="Modes" className="ml-auto flex items-center gap-1">
@@ -94,11 +102,11 @@ function HeaderButton({ label, icon, onClick, pressed }: { label: string; icon: 
       onClick={onClick}
       aria-pressed={pressed}
       title={label}
-      className={`mc-btn mc-btn-sm min-h-11 px-2.5 md:px-3 ${pressed ? "mc-btn-primary" : "mc-btn-ghost"}`}
+      className={`mc-btn mc-btn-sm min-h-11 shrink-0 px-2.5 md:px-3 ${pressed ? "mc-btn-primary" : "mc-btn-ghost"}`}
     >
       {icon}
-      {/* Visible label from tablet up; on phones the button keeps its accessible name and tooltip. */}
-      <span className="max-md:sr-only">{label}</span>
+      {/* Visible label on wide screens; otherwise the button keeps its accessible name and tooltip. */}
+      <span className="whitespace-nowrap max-xl:sr-only">{label}</span>
     </button>
   );
 }

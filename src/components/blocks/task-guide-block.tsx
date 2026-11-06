@@ -1,20 +1,20 @@
 "use client";
 
-import { Check, CircleHelp, ExternalLink } from "lucide-react";
+import { Check, ExternalLink } from "lucide-react";
 import type { ReactNode } from "react";
-import { formatDeadline, openTasks, stepProgressLabel, stepsForTask } from "@/lib/task-helpers";
+import { formatDeadline, openTasks, stepsForTask } from "@/lib/task-helpers";
 import type { Task, WorkspaceBlock } from "@/lib/types";
 import { useWorkspaceData } from "../providers/workspace-data";
 import { useWorkspaceUI } from "../providers/workspace-ui";
-import { ChoiceGroup } from "../ui/choice-group";
 import { useNotify } from "../ui/notifications";
 import { ChecklistEditor } from "./checklist-editor";
+import { CurrentStep } from "./next-step-block";
+import { TaskBlockers } from "./task-blockers";
 import { useBlockConfig } from "./use-block-config";
 
 const DEFAULTS = {
   taskId: null as string | null,
   includeCompleted: false,
-  stepView: "all" as "one" | "all",
   detailsOpen: true,
   stepsOpen: true,
   reviewOpen: false,
@@ -82,15 +82,10 @@ function Section({ title, open, onToggle, children }: { title: string; open: boo
 }
 
 function GuideContent({ task, config, setConfig }: { task: Task; config: GuideConfig; setConfig: SetGuideConfig }) {
-  const { steps, reviewItems, resources, addStep, updateStep, deleteStep, reviewActions, updateTask } = useWorkspaceData();
-  const { openMissingInfo } = useWorkspaceUI();
+  const { reviewItems, resources, reviewActions, updateTask } = useWorkspaceData();
   const { announce } = useNotify();
-  const taskSteps = stepsForTask(steps, task.id);
   const review = stepsForTask(reviewItems, task.id);
   const linkedResources = resources.filter((resource) => resource.task_id === task.id);
-  const doneCount = taskSteps.filter((step) => step.done).length;
-  const allDone = taskSteps.length > 0 && doneCount === taskSteps.length;
-  const current = taskSteps.find((step) => !step.done);
 
   return (
     <>
@@ -103,38 +98,7 @@ function GuideContent({ task, config, setConfig }: { task: Task; config: GuideCo
       </Section>
 
       <Section title="Steps" open={config.stepsOpen} onToggle={(stepsOpen) => setConfig({ stepsOpen })}>
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-semibold" aria-live="polite">
-              {stepProgressLabel(doneCount, taskSteps.length)}
-            </p>
-            <ChoiceGroup label="Step view" value={config.stepView} options={[["one", "One step"], ["all", "All steps"]]} onChange={(stepView) => setConfig({ stepView })} />
-          </div>
-          {allDone ? (
-            <div className="rounded-xl bg-surface-muted p-3" role="status">
-              <p className="font-semibold">All steps completed</p>
-              <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={() => setConfig({ reviewOpen: true })}>
-                Open review checklist
-              </button>
-            </div>
-          ) : null}
-          {config.stepView === "one" && current ? (
-            <div className="rounded-xl bg-primary-soft p-3">
-              <p className="font-semibold">{current.text}</p>
-              <button
-                type="button"
-                className="mc-btn mc-btn-primary mc-btn-sm mt-2"
-                onClick={async () => {
-                  await updateStep(current.id, { done: true });
-                  announce("Step completed.");
-                }}
-              >
-                <Check size={16} aria-hidden="true" /> Complete step
-              </button>
-            </div>
-          ) : null}
-          {config.stepView === "all" || !taskSteps.length ? <ChecklistEditor items={taskSteps} noun="step" onAdd={(text) => addStep(task.id, text)} onChange={updateStep} onDelete={deleteStep} /> : null}
-        </div>
+        <CurrentStep task={task} inTaskGuide onAllDone={() => setConfig({ reviewOpen: true })} />
       </Section>
 
       <Section title="Before submitting" open={config.reviewOpen} onToggle={(reviewOpen) => setConfig({ reviewOpen })}>
@@ -162,6 +126,8 @@ function GuideContent({ task, config, setConfig }: { task: Task; config: GuideCo
         </Section>
       ) : null}
 
+      <TaskBlockers task={task} />
+
       <div className="flex flex-wrap gap-2">
         {task.status === "done" ? (
           <p className="inline-flex items-center gap-1 font-semibold">
@@ -179,9 +145,6 @@ function GuideContent({ task, config, setConfig }: { task: Task; config: GuideCo
             Mark task done
           </button>
         )}
-        <button type="button" className="mc-btn mc-btn-ghost mc-btn-sm" onClick={() => openMissingInfo(task.id)}>
-          <CircleHelp size={16} aria-hidden="true" /> Missing information
-        </button>
       </div>
     </>
   );
