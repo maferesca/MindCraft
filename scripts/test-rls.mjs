@@ -257,7 +257,7 @@ const blocker = (await as(carol, "insert into check_ins (user_id, kind, task_id,
 await as(carol, "update check_ins set help_status = 'resolved' where id = $1", [blocker]);
 check("A blocker resolved right after writing it earns nothing", (await rewards(carol, "blocker_resolved")).length === 0);
 await as(carol, "update check_ins set help_status = 'open' where id = $1", [blocker]);
-await db.exec(`alter table check_ins disable trigger check_ins_touch; update check_ins set created_at = now() - interval '1 day' where id = '${blocker}'; alter table check_ins enable trigger check_ins_touch;`);
+await db.exec(`alter table check_ins disable trigger check_ins_touch; alter table check_ins disable trigger check_ins_created_at; update check_ins set created_at = now() - interval '1 day' where id = '${blocker}'; alter table check_ins enable trigger check_ins_touch; alter table check_ins enable trigger check_ins_created_at;`);
 await as(carol, "update check_ins set help_status = 'resolved' where id = $1", [blocker]);
 await as(carol, "update check_ins set help_status = 'open' where id = $1", [blocker]);
 await as(carol, "update check_ins set help_status = 'resolved' where id = $1", [blocker]);
@@ -305,6 +305,38 @@ check("Nobody can edit a deadline snapshot", (await as(carol, "select xp_deadlin
 
 for (let i = 0; i < 25; i += 1) await complete(bob, await newTask(bob, `Bulk ${i}`));
 check("Task completion XP stops at the daily limit", (await rewards(bob, "task_complete")).length === 20);
+
+// The ways around the rewards that the audit found stay closed.
+const dave = "55555555-5555-4555-8555-555555555555";
+await db.exec(`insert into auth.users (id, email) values ('${dave}', 'dave@example.test');`);
+const blockerId = (await as(dave, "insert into check_ins (user_id, kind, blocking, support, help_status, created_at) values ($1, 'help', 'Stuck', 'Advice', 'open', now() - interval '1 day') returning id", [dave])).rows[0].id;
+const blockerAge = async () => (await as(dave, "select extract(epoch from now() - created_at) as age from check_ins where id = $1", [blockerId])).rows[0].age;
+check("A new check-in cannot be backdated", (await blockerAge()) < 60);
+await as(dave, "update check_ins set created_at = now() - interval '1 day' where id = $1", [blockerId]);
+check("A saved check-in cannot be backdated", (await blockerAge()) < 60);
+await as(dave, "update check_ins set help_status = 'resolved' where id = $1", [blockerId]);
+check("A backdated blocker earns no XP", (await rewards(dave, "blocker_resolved")).length === 0);
+
+const snapshotOf = async (id) => (await as(dave, "select xp_deadline, xp_deadline_set_at from tasks where id = $1", [id])).rows[0];
+const undoTask = (await as(dave, "insert into tasks (user_id, title, due_date) values ($1, 'Undo me', '2030-01-10') returning id", [dave])).rows[0].id;
+const firstDeadline = await snapshotOf(undoTask);
+await as(dave, "delete from tasks where id = $1", [undoTask]);
+check("Nobody can read kept deadlines", await fails(dave, "select * from deleted_task_deadlines"));
+await as(dave, "insert into tasks (id, user_id, title, due_date) values ($1, $2, 'Undo me', '2031-01-10')", [undoTask, dave]);
+const restored = await snapshotOf(undoTask);
+check("Undo keeps a task's first deadline", restored.xp_deadline.getTime() === firstDeadline.xp_deadline.getTime());
+check("Undo keeps when the deadline was set", restored.xp_deadline_set_at.getTime() === firstDeadline.xp_deadline_set_at.getTime());
+await as(dave, "delete from tasks where id = $1", [undoTask]);
+await as(bob, "insert into tasks (id, user_id, title, due_date) values ($1, $2, 'Taken id', '2031-01-10')", [undoTask, bob]);
+check("Another account cannot take over a kept deadline", (await as(bob, "select xp_deadline from tasks where id = $1", [undoTask])).rows[0].xp_deadline.getTime() !== firstDeadline.xp_deadline.getTime());
+
+for (let i = 0; i < 7; i += 1) {
+  const id = await newTask(dave, `Early ${i}`, "'2030-02-01'");
+  await db.exec(`alter table tasks disable trigger tasks_deadline_snapshot; update tasks set xp_deadline_set_at = now() - interval '10 minutes' where id = '${id}'; alter table tasks enable trigger tasks_deadline_snapshot;`);
+  await complete(dave, id);
+}
+check("The early bonus stops at five a day", (await rewards(dave, "early_bonus")).length === 5);
+check("Tasks past the bonus limit still earn the base XP", (await rewards(dave, "task_complete")).length === 7);
 
 console.log(failures === 0 ? "\nAll RLS checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

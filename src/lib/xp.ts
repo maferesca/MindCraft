@@ -29,7 +29,7 @@ export const ACHIEVEMENTS: Record<Achievement, { name: string; description: stri
 export const HOW_XP_IS_EARNED = [
   ["Start a task in Focus Mode", "+5"],
   ["Complete a task", "+20"],
-  ["Finish before the deadline", "Up to +15"],
+  ["Finish before the deadline (up to five a day)", "Up to +15"],
   ["Resolve a recorded blocker", "+10"],
   ["Complete a task's first step in the Task guide", "+5"],
 ] as const;

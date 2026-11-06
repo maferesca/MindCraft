@@ -182,11 +182,13 @@ XP, levels, and achievements reward progress on your own work. There are no rank
 | --- | --- | --- |
 | Start a focus session on the selected task in Focus Mode | +5 | Once per task, 10 per day |
 | Complete a task | +20 | Once per task, 20 per day |
-| Finish before the deadline | Up to +15 | With the completion reward |
+| Finish before the deadline | Up to +15 | With the completion reward, 5 per day |
 | Resolve a blocker recorded at least 5 minutes earlier | +10 | Once per blocker, 5 per day |
 | Complete a task's first step in the Task guide | +5 | Once per task, 10 per day |
 
 `xp_transactions` has a unique key on user, action, and source, kept after the task is deleted, so retries, reopening, and undo can't repeat a reward. A task with the same title as one rewarded in the last 24 hours earns nothing, so recreating work doesn't either.
+
+**Known limit.** People set their own deadlines, so a far-away deadline can't be proven false. The daily limit keeps that small: at most 75 bonus XP a day. A deleted task keeps its first deadline for 30 days, so Undo can't move it, and the database sets each check-in's `created_at`, so a blocker can't be backdated.
 
 **Deadline bonus.** `remaining = (deadline - completed) / (deadline - deadline set)`: 50% or more earns +15, 20% or more earns +10, and anything above zero earns +5. It uses `tasks.xp_deadline`, the first deadline a task received, which a trigger protects from edits. A date with no time means the end of that day in the profile's timezone. No bonus applies with under an hour of notice, or within 5 minutes of setting the deadline, and under six hours of notice earns at most +5.
 
@@ -289,23 +291,26 @@ Notes, calendar events, email, and other settings are never sent. A voice record
 
 ## Validation results
 
-Run on 2026-11-02, with theme checks updated on 2026-11-03:
+Automated checks, run on 2026-11-05:
 
 | Check | Result |
 | --- | --- |
 | TypeScript (`tsc --noEmit`) | Passed, 0 errors |
 | ESLint | Passed, 0 problems |
 | Production build (`next build`) | Passed |
-| Unit tests (Vitest) | 36 of 36 passed |
-| RLS isolation (PGlite, two accounts) | 36 of 36 checks passed |
-| Theme contrast (17 themes × 6 accent options) | All text pairs ≥ 4.5:1 and all control borders and focus indicators ≥ 3:1, also under simulated protanopia, deuteranopia, and tritanopia |
+| Unit tests (Vitest) | 125 of 125 passed |
+| RLS and reward rules (PGlite, stand-in `auth` schema) | 99 of 99 checks passed |
+| Theme contrast | All checks passed |
 
-**Manual browser walkthrough (local demo, desktop 1366×860 and phone 375×812):** setup with live theme preview; empty workspace; adding blocks by pressing (no dragging); header drag; Undo, Redo, and Cancel restoring positions; Save surviving a reload; marking a step done without completing the task; completing a task updating Task List, Next step, and the calendar deadline; Focus Mode exit leaving the layout unchanged; removing the Task List block keeping all tasks; AI failure keeping the draft and changing no data; phone view in the desktop reading order with no horizontal scrolling; phone reordering through the bottom sheet; API returning 401 when signed out and 403 for the demo without opt-in.
+**Manual walkthrough (local demo):** setup, Creative Mode, resizing and reload, list and board views, creating, editing, deleting, and restoring tasks, work groups, two timers, Focus Mode, Missing information, streak date changes, XP rewards, and themes. Plan my day and proposals were also tried with a real AI provider, including a failed request and Retry. Phone layouts were checked with touch emulation.
+
+**Hosted checks:** read-only requests confirmed that an anonymous visitor can't read tables or call internal XP functions, and that the assistant endpoint needs a session.
 
 **Not yet verified:**
 
-- Real Gemini responses. No API key was available during development, so we could not confirm that the model follows the response schema. The validation and error paths are tested.
-- Real Supabase email flows. RLS was tested in PGlite with a stand-in for the `auth` schema, not on a hosted Supabase project.
+- Sign-up and password recovery on the hosted Supabase project.
+- Voice transcription with a real recording.
+- Real iPhone and Android devices.
 - Screen-reader testing with NVDA, JAWS, or VoiceOver.
 - Testing with users.
 
@@ -339,6 +344,20 @@ Following WCAG 2.2 AA practices is a goal, not a certification.
 
 `src/lib/demo/sample-data.ts` contains fictional tasks, notes, and an event, for example the made-up "Northwind Bakery". This data is loaded only into the local demo and is never written to Supabase.
 
+## Team
+
+MindCraft is built by **Tec it Easy** for the North America AI Challenge.
+
+**Members and roles:** to be completed by the team before submission.
+
 ## AI assistance disclosure
 
-An AI coding assistant (Claude, by Anthropic) generated most of this codebase from the team's written brief. That includes the schema, the components, the tests, and this README. The team should review, test, and adapt the code before relying on it. The AI did not run user research and could not test the app with real Gemini or Supabase credentials. Any claims about benefits for users still need evaluation with users.
+An AI coding assistant (Claude, by Anthropic) generated most of this codebase from the team's written brief. That includes the schema, the components, the tests, and this README. The team directed the work and reviewed the results in the running app. The AI did not run user research. Any claims about benefits for users still need evaluation with users.
+
+### Commit attribution
+
+Commit author fields in this repository do not show who wrote the code. Commits `007c507`, `312dd8a`, `0fe94c1`, `77ba1f9`, `03fff8c`, and `bc40948` name team members as authors, but the AI assistant wrote those changes while one team member directed it. Only some AI-written commits carry a `Co-Authored-By: Claude` line, so a commit without one may still be AI-written. The history has not been rewritten; this note is the correction.
+
+## Credits
+
+Built with [Next.js](https://nextjs.org), [React](https://react.dev), [Supabase](https://supabase.com), [Radix UI](https://www.radix-ui.com), [React-Grid-Layout](https://github.com/react-grid-layout/react-grid-layout), [Tailwind CSS](https://tailwindcss.com), [Zod](https://zod.dev), [date-fns](https://date-fns.org), [Lucide](https://lucide.dev), [Vitest](https://vitest.dev), and [PGlite](https://pglite.dev). The fonts are Lexend and OpenDyslexic. AI responses come from [Groq](https://groq.com) and [Google Gemini](https://ai.google.dev).

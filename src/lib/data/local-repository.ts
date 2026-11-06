@@ -86,7 +86,8 @@ export function createLocalRepository(): Repository | null {
       const record = { id: crypto.randomUUID(), created_at: now, updated_at: now, ...row, user_id: DEMO_USER_ID };
       // Mirrors the primary key, so the demo also rejects a second copy.
       if (rows(table).some((item) => item.id === record.id)) throw new RepositoryError(`Could not save to ${table}: duplicate id`, "23505");
-      if (table === "tasks") snapshotDeadline(record);
+      // Undo passes the snapshot back, so a restored task keeps its first deadline.
+      if (table === "tasks") snapshotDeadline(record, record);
       rows(table).push(record);
       save(database);
       return structuredClone(record) as T;

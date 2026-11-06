@@ -6,7 +6,7 @@ import type { Row, TableName } from "./repository";
 
 type Rows = (table: TableName) => Row[];
 
-const DAILY_LIMITS: Record<string, number> = { task_complete: 20, blocker_resolved: 5, focus_start: 10, first_step: 10 };
+const DAILY_LIMITS: Record<string, number> = { task_complete: 20, early_bonus: 5, blocker_resolved: 5, focus_start: 10, first_step: 10 };
 const DAY_MS = 86_400_000;
 
 const isRecent = (row: Row, now: number) => now - new Date(row.created_at as string).getTime() < DAY_MS;
