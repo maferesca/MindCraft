@@ -168,6 +168,10 @@ The shared background is drawn per block, so it never covers a block outside the
 
 Each timer block has its own name, length, and linked task or activity in `config`, and its own session in `preferences.timerSessions`. Sessions are stored as timestamps, so a refresh, a change of view, or a background tab never resets or slows them. Only one timer runs at a time: starting another pauses the first and says so. **Start new session** always uses the configured length, and asks first if it would replace an unfinished session. Focus Mode shows the timer in use without touching its session. Finishing a session never completes a task.
 
+### Visit streak
+
+The streak flame changes color with the days in a row: orange from day 1, red from 3, pink from 7, purple from 14, blue from 30, and gold from 100. The stages are a list in `src/lib/streak.ts`, each with a color for light and dark themes that a test checks against every theme. The monochrome theme keeps its flame uncolored. A broken streak returns to the first color, and the number and the streak panel carry the same information as the color.
+
 ### MindCraft Journey
 
 XP, levels, and achievements reward progress on your own work. There are no rankings, and XP is never subtracted.

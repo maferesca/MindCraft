@@ -2,6 +2,8 @@
 
 import { DropdownMenu, Popover } from "radix-ui";
 import { Bell, Blocks, CalendarCheck, Flame, Focus, LogOut, Palette, Shield, SlidersHorizontal, Star, User, UserCog } from "lucide-react";
+import { STREAK_STAGES, streakStage } from "@/lib/streak";
+import { THEMES } from "@/lib/themes";
 import { BrandMark, Wordmark } from "../brand/brand-mark";
 import { TeamCredit } from "../brand/team-credit";
 import { useWorkspaceData } from "../providers/workspace-data";
@@ -114,10 +116,14 @@ function HeaderButton({ label, icon, onClick, pressed }: { label: string; icon: 
 function StreakIndicator() {
   const { streak, preferences, updatePreferences } = useWorkspaceData();
   if (!preferences.showStreak || !streak || streak.current_streak < 1) return null;
+  const { stage, next } = streakStage(streak.current_streak);
+  const tone = THEMES[preferences.theme].dark ? "dark" : "light";
+  // The monochrome theme has no color by design, so the flame follows its text.
+  const colorOf = (item: (typeof STREAK_STAGES)[number]) => (preferences.theme === "monochrome" ? "currentColor" : item[tone]);
   return (
     <Popover.Root>
       <Popover.Trigger className="mc-chip ml-1 shrink-0 cursor-pointer bg-surface" aria-label={`Visit streak: ${streak.current_streak} ${streak.current_streak === 1 ? "day" : "days"}. Show details`}>
-        <Flame size={14} aria-hidden="true" fill="currentColor" className="shrink-0 text-[#E8590C]" />
+        <Flame size={14} aria-hidden="true" fill="currentColor" className="shrink-0" style={{ color: colorOf(stage) }} />
         <span className="max-sm:sr-only">{streak.current_streak} day{streak.current_streak === 1 ? "" : "s"}</span>
         <span className="sm:hidden">{streak.current_streak}</span>
       </Popover.Trigger>
@@ -127,6 +133,20 @@ function StreakIndicator() {
           <p className="mc-hint mt-1">
             Days in a row you opened MindCraft. Best: {streak.best_streak}.
           </p>
+          <ul className="mt-2 flex flex-wrap gap-2" aria-label="Flame colors by days in a row">
+            {STREAK_STAGES.map((item) => (
+              <li key={item.days} className={`inline-flex items-center gap-1 rounded-full px-1.5 text-sm ${item === stage ? "bg-surface-muted font-bold" : ""}`}>
+                <Flame size={14} aria-hidden="true" fill="currentColor" style={{ color: colorOf(item) }} />
+                {item.days}
+                <span className="sr-only">
+                  {" "}
+                  days: {item.name}
+                  {item === stage ? " (current)" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mc-hint mt-1">{next ? `The flame changes color at ${next.days} days.` : "You've reached the last flame color."}</p>
           <button type="button" className="mc-btn mc-btn-secondary mc-btn-sm mt-2" onClick={() => updatePreferences({ showStreak: false })}>
             Hide streak
           </button>

@@ -6,6 +6,8 @@ import { isGroupMinimized } from "../blocks";
 import { joinGroup, keepGroupsTogether, leaveGroup, moveGroup, removeGroup, renameGroup, workGroups } from "../groups";
 import { DEFAULT_PREFERENCES, normalizePreferences } from "../preferences";
 import { chooseVoice, speechLanguage } from "../speech";
+import { STREAK_STAGES, streakStage } from "../streak";
+import { THEMES, THEME_IDS } from "../themes";
 import { earlyBonus, levelProgress, rewardFeedback } from "../xp";
 import type { AssistantContext } from "../schemas";
 import { fallbackTaskBlockId, taskBlockOptions, tasksForBlock } from "../task-helpers";
@@ -188,6 +190,36 @@ describe("read aloud voice", () => {
   it("falls back when a chosen voice is not on this computer", () => {
     expect(chooseVoice(voices, "en", "Gone")?.name).toBe("Microsoft Aria Online (Natural)");
     expect(chooseVoice([], "en", "")).toBeNull();
+  });
+});
+
+describe("streak colors", () => {
+  const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((start) => {
+      const c = parseInt(hex.slice(start, start + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (a: string, b: string) => {
+    const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (high + 0.05) / (low + 0.05);
+  };
+
+  it("changes at each stage and stays on the last one", () => {
+    expect([1, 2, 3, 6, 7, 13, 14, 29, 30, 99, 100, 900].map((days) => streakStage(days).stage.name)).toEqual(["Orange", "Orange", "Red", "Red", "Pink", "Pink", "Purple", "Purple", "Blue", "Blue", "Gold", "Gold"]);
+    expect(streakStage(5).next?.days).toBe(7);
+    expect(streakStage(100).next).toBeNull();
+  });
+
+  it("is visible on the surface of every theme", () => {
+    for (const id of THEME_IDS) {
+      if (id === "monochrome") continue;
+      const { dark, tokens } = THEMES[id];
+      for (const stage of STREAK_STAGES) {
+        expect(contrast(dark ? stage.dark : stage.light, tokens.surface), `${stage.name} on ${id}`).toBeGreaterThanOrEqual(3);
+      }
+    }
   });
 });
 
