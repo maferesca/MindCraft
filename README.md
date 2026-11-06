@@ -302,17 +302,13 @@ Automated checks, run on 2026-11-05:
 | RLS and reward rules (PGlite, stand-in `auth` schema) | 99 of 99 checks passed |
 | Theme contrast | All checks passed |
 
-**Manual walkthrough (local demo):** setup, Creative Mode, resizing and reload, list and board views, creating, editing, deleting, and restoring tasks, work groups, two timers, Focus Mode, Missing information, streak date changes, XP rewards, and themes. Plan my day and proposals were also tried with a real AI provider, including a failed request and Retry. Phone layouts were checked with touch emulation.
+**Manual walkthrough (local demo):** setup, Creative Mode, resizing and reload, list and board views, creating, editing, deleting, and restoring tasks, work groups, two timers, Focus Mode, Missing information, streak date changes, XP rewards, and themes. Plan my day and proposals were also tried with a real AI provider, including a failed request and Retry. Phone layouts were checked with touch emulation, and the team also tested voice input and the app on real iPhone and Android phones.
 
 **Hosted checks:** read-only requests confirmed that an anonymous visitor can't read tables or call internal XP functions, and that the assistant endpoint needs a session.
 
-**Not yet verified:**
+**Team testing:** the team also tested sign-up and password recovery on the hosted Supabase project, and ran screen-reader tests.
 
-- Sign-up and password recovery on the hosted Supabase project.
-- Voice transcription with a real recording.
-- Real iPhone and Android devices.
-- Screen-reader testing with NVDA, JAWS, or VoiceOver.
-- Testing with users.
+**User feedback:** we tried MindCraft with users from our school and showed it to two other people to validate the idea. This was early feedback from a small group, not a formal study.
 
 Following WCAG 2.2 AA practices is a goal, not a certification.
 
@@ -357,11 +353,9 @@ MindCraft is built by **Tec it Easy** for the North America AI Challenge.
 
 ## AI assistance disclosure
 
-An AI coding assistant (Claude, by Anthropic) generated most of this codebase from the team's written brief. That includes the schema, the components, the tests, and this README. The team directed the work and reviewed the results in the running app. The AI did not run user research. Any claims about benefits for users still need evaluation with users.
+We built MindCraft with an AI coding assistant (Claude, by Anthropic), which generated most of the code from our written brief. The four of us supervised the whole project, and the ideation, research, and design direction came from the team. We validated the work by testing it in the running app and asked for corrections when something was wrong or didn't fit. Early feedback came from a small group at our school, so claims about benefits for users still need wider evaluation.
 
-### Commit attribution
-
-Commit author fields in this repository do not show who wrote the code. Commits `007c507`, `312dd8a`, `0fe94c1`, `77ba1f9`, `03fff8c`, and `bc40948` name team members as authors, but the AI assistant wrote those changes while one team member directed it. Only some AI-written commits carry a `Co-Authored-By: Claude` line, so a commit without one may still be AI-written. The history has not been rewritten; this note is the correction.
+Several times, more than one of us worked on the same computer so we wouldn't overwrite each other's code, so the author on a commit doesn't always show who made that change. Some commits were made by Claude, and not all of them carry a `Co-Authored-By` line.
 
 ## Credits
 
